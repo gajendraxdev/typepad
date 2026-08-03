@@ -42,19 +42,10 @@ export function EmptyState({ onNew, onOpenLibrary }: Props) {
           </button>
         </div>
         <p className="text-xs text-[var(--text-faint)]">
-          <kbd className="ui-kbd">{mod}+N</kbd> new
-          {onOpenLibrary ? (
-            <>
-              {" "}
-              · <kbd className="ui-kbd">{mod}+F</kbd> library
-            </>
-          ) : (
-            <>
-              {" "}
-              · <kbd className="ui-kbd">{mod}+F</kbd> search
-            </>
-          )}{" "}
-          · <kbd className="ui-kbd">{mod}+W</kbd> close tab
+          <kbd className="ui-kbd">{mod}+N</kbd> new ·{" "}
+          <kbd className="ui-kbd">{mod}+F</kbd> find in note ·{" "}
+          <kbd className="ui-kbd">{mod}+Shift+F</kbd> library ·{" "}
+          <kbd className="ui-kbd">{mod}+W</kbd> close tab
         </p>
       </div>
     </div>

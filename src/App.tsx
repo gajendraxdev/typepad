@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Editor } from "./components/Editor";
+import { Editor, type EditorHandle } from "./components/Editor";
 import { EmptyState } from "./components/EmptyState";
 import { FirstRunDialog } from "./components/FirstRunDialog";
 import { SettingsModal } from "./components/SettingsModal";
@@ -28,7 +28,10 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   /** Live width while dragging (persisted after pointer up via onWidthChange). */
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+  /** Bumped to focus library search after sidebar mounts/expands. */
+  const [searchFocusReq, setSearchFocusReq] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<EditorHandle>(null);
   const widthSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ready = bootstrapped && !needsSetup && !!config?.notesFolder;
@@ -111,20 +114,59 @@ export default function App() {
 
   const { newNote, closeNote, selectTab, closeTab, flushAllDirty } = notesApi;
 
+  // After Ctrl+F expands the sidebar, wait until the search input exists, then focus it.
+  useEffect(() => {
+    if (searchFocusReq === 0) return;
+    if (!sidebarOpen) return;
+    let tries = 0;
+    const id = window.setInterval(() => {
+      tries += 1;
+      const el = searchRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+        window.clearInterval(id);
+      } else if (tries > 20) {
+        window.clearInterval(id);
+      }
+    }, 16);
+    return () => window.clearInterval(id);
+  }, [searchFocusReq, sidebarOpen]);
+
   const shortcutHandlers = useMemo(
     () => ({
       onNew: () => void newNote(),
-      onSearch: () => {
+      // Ctrl+F → find inside the open note
+      onFindInNote: () => {
+        if (notesApi.active) {
+          editorRef.current?.openFind();
+        } else {
+          // No note open → fall back to library search
+          if (config && !config.sidebarOpen) {
+            void persistConfig({ ...config, sidebarOpen: true });
+          }
+          setSearchFocusReq((n) => n + 1);
+        }
+      },
+      // Ctrl+Shift+F → search notes in the library
+      onLibrarySearch: () => {
         if (config && !config.sidebarOpen) {
           void persistConfig({ ...config, sidebarOpen: true });
         }
-        requestAnimationFrame(() => searchRef.current?.focus());
+        setSearchFocusReq((n) => n + 1);
       },
       onSettings: () => setSettingsOpen(true),
       onCloseNote: () => void closeNote(),
       onToggleSidebar: toggleSidebar,
     }),
-    [newNote, closeNote, config, persistConfig, toggleSidebar],
+    [
+      newNote,
+      closeNote,
+      config,
+      persistConfig,
+      toggleSidebar,
+      notesApi.active,
+    ],
   );
 
   useKeyboardShortcuts(shortcutHandlers);
@@ -236,6 +278,7 @@ export default function App() {
             <div className="app-editor-area">
               {notesApi.active ? (
                 <Editor
+                  ref={editorRef}
                   value={notesApi.draft}
                   onChange={notesApi.updateDraft}
                   fontFamily={

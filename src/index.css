@@ -757,6 +757,67 @@ input[type="search"] {
   background: var(--bg-elevated);
 }
 
+.editor-find {
+  position: absolute;
+  top: 0.65rem;
+  right: 1rem;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.editor-find-input {
+  width: 11rem;
+  border: 0;
+  background: transparent;
+  padding: 0.25rem 0.15rem;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+}
+
+.editor-find-input::placeholder {
+  color: var(--text-faint);
+}
+
+.editor-find-count {
+  min-width: 4.5rem;
+  padding: 0 0.25rem;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: right;
+  white-space: nowrap;
+  tabular-nums: true;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-find-btn {
+  display: inline-flex;
+  width: 1.65rem;
+  height: 1.65rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.editor-find-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.editor-find-btn:disabled {
+  opacity: 0.35;
+}
+
 .editor-textarea {
   display: block !important;
   position: absolute !important;

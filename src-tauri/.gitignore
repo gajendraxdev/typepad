@@ -1,0 +1,15 @@
+# Cargo build output
+/target/
+
+# Tauri-generated schemas & bindings
+/gen/
+
+# Windows installer tooling (if present)
+/WixTools/
+
+# Local build leftovers
+*.exe
+*.pdb
+*.msi
+*.appx
+*.appxbundle

@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Prompt chevron -->
+  <path d="M 180 160 L 280 256 L 180 352"
+        fill="none"
+        stroke="#F2542D"
+        stroke-width="52"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+
+  <!-- Blinking cursor bar -->
+  <rect x="320" y="180" width="44" height="152" rx="22" fill="#F2542D"/>
+</svg>

@@ -1,0 +1,46 @@
+import { countChars, countWords } from "../lib/format";
+import type { SaveStatus } from "../types";
+import { SaveIndicator } from "./SaveIndicator";
+
+interface Props {
+  content: string;
+  saveStatus: SaveStatus;
+  filename?: string | null;
+  title?: string | null;
+}
+
+export function StatusBar({ content, saveStatus, filename, title }: Props) {
+  const words = countWords(content);
+  const chars = countChars(content);
+  const hasNote = Boolean(filename || title);
+
+  return (
+    <div className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--bg-sidebar)]/90 px-3 text-[11px] text-[var(--text-faint)]">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <SaveIndicator status={saveStatus} />
+        {hasNote ? (
+          <>
+            <span className="hidden h-3 w-px bg-[var(--border)] sm:block" />
+            <span
+              className="truncate text-[var(--text-muted)]"
+              title={filename ?? undefined}
+            >
+              {filename || title}
+            </span>
+          </>
+        ) : null}
+      </div>
+      {hasNote ? (
+        <div className="flex shrink-0 items-center gap-2 tabular-nums">
+          <span>
+            {words.toLocaleString()} word{words === 1 ? "" : "s"}
+          </span>
+          <span className="text-[var(--border-strong)]">·</span>
+          <span>
+            {chars.toLocaleString()} char{chars === 1 ? "" : "s"}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -43,36 +43,36 @@ export function ConfirmDialog({
         aria-modal
         aria-labelledby="confirm-title"
         aria-describedby="confirm-desc"
-        className="ui-surface anim-scale-in w-full max-w-sm p-5"
+        className="ui-surface anim-scale-in w-full max-w-sm p-3.5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-start gap-3">
+        <div className="mb-2.5 flex items-start gap-2.5">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
               danger
                 ? "bg-[var(--danger-soft)] text-[var(--danger)]"
                 : "bg-[var(--accent-soft)] text-[var(--accent)]"
             }`}
           >
-            <IconTrash size={18} />
+            <IconTrash size={15} />
           </div>
           <div>
             <h2
               id="confirm-title"
-              className="text-base font-semibold tracking-tight"
+              className="text-[13px] font-semibold tracking-tight"
             >
               {title}
             </h2>
             <p
               id="confirm-desc"
-              className="mt-1 text-sm leading-relaxed text-[var(--text-muted)]"
+              className="mt-0.5 text-[12px] leading-snug text-[var(--text-muted)]"
             >
               {message}
             </p>
           </div>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-3 flex justify-end gap-1.5">
           <button type="button" className="ui-btn ui-btn-outline" onClick={onCancel}>
             {cancelLabel}
           </button>

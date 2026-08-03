@@ -80,6 +80,23 @@ export function IconFolder({ className, size = 16 }: IconProps) {
   );
 }
 
+export function IconKeyboard({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+    </svg>
+  );
+}
+
+export function IconType({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M4 7V5h16v2M9 19h6M12 5v14" />
+    </svg>
+  );
+}
+
 export function IconClose({ className, size = 16 }: IconProps) {
   return (
     <svg {...base(size)} className={className}>

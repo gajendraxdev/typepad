@@ -16,7 +16,7 @@ fn default_true() -> bool {
 }
 
 fn default_sidebar_width() -> u32 {
-    280
+    240
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -6,10 +6,12 @@ import {
   IconCheck,
   IconClose,
   IconFolder,
+  IconKeyboard,
   IconMonitor,
   IconMoon,
   IconPanelLeft,
   IconSun,
+  IconType,
 } from "./icons";
 
 interface Props {
@@ -17,6 +19,40 @@ interface Props {
   onClose: () => void;
   onConfigChange: (config: AppConfig) => Promise<void>;
 }
+
+type SectionId = "appearance" | "layout" | "storage" | "shortcuts";
+
+const SECTIONS: {
+  id: SectionId;
+  label: string;
+  description: string;
+  icon: typeof IconType;
+}[] = [
+  {
+    id: "appearance",
+    label: "Appearance",
+    description: "Theme and editor font",
+    icon: IconType,
+  },
+  {
+    id: "layout",
+    label: "Layout",
+    description: "Sidebar and tabs",
+    icon: IconPanelLeft,
+  },
+  {
+    id: "storage",
+    label: "Storage",
+    description: "Notes folder",
+    icon: IconFolder,
+  },
+  {
+    id: "shortcuts",
+    label: "Shortcuts",
+    description: "Keyboard reference",
+    icon: IconKeyboard,
+  },
+];
 
 const FONTS = [
   { label: "System Sans", value: "ui-sans-serif, system-ui, sans-serif" },
@@ -33,7 +69,35 @@ const THEMES: { id: ThemeMode; label: string; icon: typeof IconSun }[] = [
   { id: "dark", label: "Dark", icon: IconMoon },
 ];
 
+const SHORTCUTS: { keys: string; action: string }[] = [
+  { keys: "Ctrl+N", action: "New note" },
+  { keys: "Ctrl+F", action: "Find in current note" },
+  { keys: "Ctrl+Shift+F", action: "Search library" },
+  { keys: "Ctrl+W", action: "Close current tab" },
+  { keys: "Ctrl+B", action: "Toggle library sidebar" },
+  { keys: "Ctrl+,", action: "Open settings" },
+  { keys: "Enter", action: "Find next match" },
+  { keys: "Shift+Enter", action: "Find previous match" },
+  { keys: "Esc", action: "Close find / dialogs" },
+];
+
+function isMac(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    navigator.platform.toLowerCase().includes("mac")
+  );
+}
+
+function displayKeys(keys: string): string {
+  if (!isMac()) return keys;
+  return keys
+    .replace(/Ctrl\+/g, "⌘")
+    .replace(/Shift\+/g, "⇧")
+    .replace(/Alt\+/g, "⌥");
+}
+
 export function SettingsModal({ config, onClose, onConfigChange }: Props) {
+  const [section, setSection] = useState<SectionId>("appearance");
   const [theme, setTheme] = useState<ThemeMode>(config.theme);
   const [fontFamily, setFontFamily] = useState(config.fontFamily);
   const [fontSize, setFontSize] = useState(config.fontSize);
@@ -47,7 +111,6 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
   const configRef = useRef(config);
   configRef.current = config;
 
-  // Live-apply appearance + layout prefs (debounced).
   useEffect(() => {
     const current = configRef.current;
     if (
@@ -88,13 +151,17 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Clear folder message when leaving storage section
+  useEffect(() => {
+    if (section !== "storage") setMessage(null);
+  }, [section]);
+
   const changeFolder = async (moveExisting: boolean) => {
     const picked = await api.pickFolder(folder || undefined);
     if (!picked) return;
     setBusy(true);
     setMessage(null);
     try {
-      // setNotesFolder persists path; merge appearance so parent can reset tabs.
       const next = await api.setNotesFolder({
         path: picked,
         moveExisting,
@@ -120,20 +187,23 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
     }
   };
 
+  const activeMeta = SECTIONS.find((s) => s.id === section)!;
+
   return (
     <div className="ui-overlay" onClick={onClose} role="presentation">
       <div
         role="dialog"
         aria-modal
         aria-label="Settings"
-        className="ui-surface anim-scale-in flex max-h-[min(90vh,680px)] w-full max-w-lg flex-col overflow-hidden"
+        className="settings-shell ui-surface anim-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3.5">
+        {/* Header */}
+        <div className="settings-header">
           <div>
-            <h2 className="text-base font-semibold tracking-tight">Settings</h2>
-            <p className="text-[11px] text-[var(--text-faint)]">
-              Changes apply instantly
+            <h2>Settings</h2>
+            <p>
+              {activeMeta.label} · changes apply instantly
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -149,193 +219,244 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
               className="ui-icon-btn"
               aria-label="Close settings"
             >
-              <IconClose size={16} />
+              <IconClose size={15} />
             </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
-          <section className="space-y-3">
-            <h3 className="text-[11px] font-semibold tracking-wider text-[var(--text-faint)] uppercase">
-              Appearance
-            </h3>
+        <div className="settings-body">
+          {/* Section nav */}
+          <nav className="settings-nav" aria-label="Settings sections">
+            {SECTIONS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                className={`settings-nav-item ${section === id ? "is-active" : ""}`}
+                onClick={() => setSection(id)}
+                aria-current={section === id ? "page" : undefined}
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
 
-            <div>
-              <span className="mb-1.5 block text-sm text-[var(--text-muted)]">
-                Theme
-              </span>
-              <div className="seg">
-                {THEMES.map(({ id, label, icon: Icon }) => (
+          {/* Section content */}
+          <div className="settings-content">
+            {section === "appearance" ? (
+              <section className="settings-panel">
+                <header className="settings-panel-title">
+                  <h3>Appearance</h3>
+                  <p>How Typepad looks while you write.</p>
+                </header>
+
+                <div>
+                  <span className="settings-field-label">Theme</span>
+                  <div className="seg">
+                    {THEMES.map(({ id, label, icon: Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={`seg-btn ${theme === id ? "is-active" : ""}`}
+                        onClick={() => setTheme(id)}
+                      >
+                        <Icon size={14} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className="settings-field-label">Editor font</span>
+                  <select
+                    value={fontFamily}
+                    onChange={(e) => setFontFamily(e.target.value)}
+                    className="ui-input !rounded-md"
+                    style={{ fontFamily }}
+                  >
+                    {FONTS.map((f) => (
+                      <option
+                        key={f.value}
+                        value={f.value}
+                        style={{ fontFamily: f.value }}
+                      >
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="settings-field-label !mb-0">
+                      Font size
+                    </span>
+                    <span className="text-[12px] tabular-nums text-[var(--text-faint)]">
+                      {fontSize}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={12}
+                    max={28}
+                    value={fontSize}
+                    onChange={(e) => setFontSize(Number(e.target.value))}
+                    className="w-full accent-[var(--accent)]"
+                  />
+                  <p
+                    className="mt-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-[var(--text)]"
+                    style={{
+                      fontFamily,
+                      fontSize: `${fontSize}px`,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    The quick brown fox writes a note.
+                  </p>
+                </div>
+              </section>
+            ) : null}
+
+            {section === "layout" ? (
+              <section className="settings-panel">
+                <header className="settings-panel-title">
+                  <h3>Layout</h3>
+                  <p>
+                    Title-bar tabs stay available. Choose whether the library
+                    sits beside the editor.
+                  </p>
+                </header>
+
+                <div className="settings-layout-grid">
                   <button
-                    key={id}
                     type="button"
-                    className={`seg-btn ${theme === id ? "is-active" : ""}`}
-                    onClick={() => setTheme(id)}
+                    onClick={() => setTabLayout("top")}
+                    className={`settings-layout-card ${
+                      tabLayout === "top" ? "is-active" : ""
+                    }`}
                   >
-                    <Icon size={14} />
-                    {label}
+                    <div className="settings-layout-preview">
+                      <div className="flex h-8 items-start">
+                        <div className="flex h-3 w-full items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-sidebar)] px-1.5">
+                          <div className="h-1.5 w-9 rounded-sm bg-[var(--text)]/25" />
+                          <div className="h-1.5 w-6 rounded-sm bg-[var(--border-strong)]" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[12.5px] font-semibold">Tabs only</div>
+                    <div className="mt-0.5 text-[11px] text-[var(--text-faint)]">
+                      Library via Ctrl+Shift+F
+                    </div>
                   </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="block text-sm">
-              <span className="mb-1.5 block text-[var(--text-muted)]">
-                Editor font
-              </span>
-              <select
-                value={fontFamily}
-                onChange={(e) => setFontFamily(e.target.value)}
-                className="ui-input"
-                style={{ fontFamily }}
-              >
-                {FONTS.map((f) => (
-                  <option
-                    key={f.value}
-                    value={f.value}
-                    style={{ fontFamily: f.value }}
+                  <button
+                    type="button"
+                    onClick={() => setTabLayout("sidebar")}
+                    className={`settings-layout-card ${
+                      tabLayout === "sidebar" ? "is-active" : ""
+                    }`}
                   >
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                    <div className="settings-layout-preview">
+                      <div className="flex h-3 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-sidebar)] px-1.5">
+                        <div className="h-1.5 w-7 rounded-sm bg-[var(--text)]/25" />
+                        <div className="h-1.5 w-5 rounded-sm bg-[var(--border-strong)]" />
+                      </div>
+                      <div className="flex h-5">
+                        <div className="w-7 border-r border-[var(--border)] bg-[var(--bg-sidebar)]" />
+                        <div className="flex-1" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-[12.5px] font-semibold">
+                      <IconPanelLeft size={12} />
+                      Sidebar + tabs
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-[var(--text-faint)]">
+                      Library and top tabs
+                    </div>
+                  </button>
+                </div>
+              </section>
+            ) : null}
 
-            <div>
-              <div className="mb-1.5 flex items-center justify-between text-sm">
-                <span className="text-[var(--text-muted)]">Font size</span>
-                <span className="tabular-nums text-[var(--text-faint)]">
-                  {fontSize}px
-                </span>
-              </div>
-              <input
-                type="range"
-                min={12}
-                max={28}
-                value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-full accent-[var(--accent)]"
-              />
-              <p
-                className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-[var(--text)]"
-                style={{
-                  fontFamily,
-                  fontSize: `${fontSize}px`,
-                  lineHeight: 1.55,
-                }}
-              >
-                The quick brown fox writes a note.
-              </p>
-            </div>
-          </section>
+            {section === "storage" ? (
+              <section className="settings-panel">
+                <header className="settings-panel-title">
+                  <h3>Storage</h3>
+                  <p>Notes are plain .txt files in a folder you choose.</p>
+                </header>
 
-          <section className="space-y-3">
-            <h3 className="text-[11px] font-semibold tracking-wider text-[var(--text-faint)] uppercase">
-              Layout
-            </h3>
-            <p className="text-[12px] leading-relaxed text-[var(--text-muted)]">
-              Title-bar tabs are always available. Sidebar adds a permanent
-              library beside the editor.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setTabLayout("top")}
-                className={`rounded-xl border px-3 py-3 text-left transition ${
-                  tabLayout === "top"
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-sm"
-                    : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
-                }`}
-              >
-                <div className="mb-2 h-10 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]">
-                  <div className="flex h-3.5 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-sidebar)] px-1.5">
-                    <div className="h-1.5 w-10 rounded-full bg-[var(--text)]/25" />
-                    <div className="h-1.5 w-8 rounded-full bg-[var(--border-strong)]" />
+                <div>
+                  <span className="settings-field-label">Notes folder</span>
+                  <div className="flex items-start gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2">
+                    <IconFolder
+                      size={14}
+                      className="mt-0.5 shrink-0 text-[var(--accent)]"
+                    />
+                    <p className="min-w-0 break-all text-[12px] leading-snug text-[var(--text-muted)]">
+                      {folder || "Not set"}
+                    </p>
                   </div>
                 </div>
-                <div className="text-[13px] font-semibold">Tabs only</div>
-                <div className="mt-0.5 text-[11px] text-[var(--text-faint)]">
-                  Title bar tabs + library popup
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTabLayout("sidebar")}
-                className={`rounded-xl border px-3 py-3 text-left transition ${
-                  tabLayout === "sidebar"
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-sm"
-                    : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
-                }`}
-              >
-                <div className="mb-2 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]">
-                  <div className="flex h-3 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-sidebar)] px-1.5">
-                    <div className="h-1.5 w-8 rounded-full bg-[var(--text)]/25" />
-                    <div className="h-1.5 w-6 rounded-full bg-[var(--border-strong)]" />
-                  </div>
-                  <div className="flex h-7">
-                    <div className="w-8 border-r border-[var(--border)] bg-[var(--bg-sidebar)]" />
-                    <div className="flex-1" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-[13px] font-semibold">
-                  <IconPanelLeft size={13} />
-                  Sidebar + tabs
-                </div>
-                <div className="mt-0.5 text-[11px] text-[var(--text-faint)]">
-                  Library sidebar and top tabs together
-                </div>
-              </button>
-            </div>
-          </section>
 
-          <section className="space-y-3">
-            <h3 className="text-[11px] font-semibold tracking-wider text-[var(--text-faint)] uppercase">
-              Notes folder
-            </h3>
-            <div className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
-              <IconFolder
-                size={16}
-                className="mt-0.5 shrink-0 text-[var(--accent)]"
-              />
-              <p className="min-w-0 break-all text-xs leading-relaxed text-[var(--text-muted)]">
-                {folder || "Not set"}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void changeFolder(true)}
-                className="ui-btn ui-btn-outline text-[13px] disabled:opacity-60"
-              >
-                Move notes here…
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void changeFolder(false)}
-                className="ui-btn ui-btn-ghost text-[13px] disabled:opacity-60"
-              >
-                Point only…
-              </button>
-            </div>
-            <p className="text-[11px] leading-relaxed text-[var(--text-faint)]">
-              <strong className="font-medium text-[var(--text-muted)]">
-                Move
-              </strong>{" "}
-              relocates existing .txt notes.{" "}
-              <strong className="font-medium text-[var(--text-muted)]">
-                Point only
-              </strong>{" "}
-              keeps old files where they are.
-            </p>
-          </section>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void changeFolder(true)}
+                    className="ui-btn ui-btn-outline !rounded-md disabled:opacity-60"
+                  >
+                    Move notes here…
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void changeFolder(false)}
+                    className="ui-btn ui-btn-ghost !rounded-md disabled:opacity-60"
+                  >
+                    Point only…
+                  </button>
+                </div>
+                <p className="text-[11px] leading-snug text-[var(--text-faint)]">
+                  <strong className="font-medium text-[var(--text-muted)]">
+                    Move
+                  </strong>{" "}
+                  relocates .txt notes.{" "}
+                  <strong className="font-medium text-[var(--text-muted)]">
+                    Point only
+                  </strong>{" "}
+                  keeps old files where they are.
+                </p>
 
-          {message ? (
-            <p className="anim-fade-in rounded-lg bg-[var(--success-soft)] px-3 py-2 text-xs text-[var(--success)]">
-              {message}
-            </p>
-          ) : null}
+                {message ? (
+                  <p className="anim-fade-in rounded-md bg-[var(--success-soft)] px-2.5 py-1.5 text-[12px] text-[var(--success)]">
+                    {message}
+                  </p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {section === "shortcuts" ? (
+              <section className="settings-panel">
+                <header className="settings-panel-title">
+                  <h3>Keyboard shortcuts</h3>
+                  <p>Works even while the cursor is in the editor.</p>
+                </header>
+
+                <ul className="settings-shortcut-list">
+                  {SHORTCUTS.map((row) => (
+                    <li key={row.keys} className="settings-shortcut-row">
+                      <span className="settings-shortcut-action">
+                        {row.action}
+                      </span>
+                      <kbd className="settings-shortcut-keys">
+                        {displayKeys(row.keys)}
+                      </kbd>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

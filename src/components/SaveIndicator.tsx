@@ -34,12 +34,12 @@ export function SaveIndicator({ status }: Props) {
 
   return (
     <div
-      className={`flex items-center gap-1.5 text-[11px] text-[var(--text-muted)] ${wrapClass}`}
+      className={`flex items-center gap-1 text-[10px] text-[var(--text-muted)] ${wrapClass}`}
       title={label}
       aria-live="polite"
     >
       <span
-        className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass} ${
+        className={`inline-block h-1 w-1 rounded-full ${dotClass} ${
           status === "saving" ? "animate-pulse" : ""
         }`}
       />

@@ -15,12 +15,12 @@ export function StatusBar({ content, saveStatus, filename, title }: Props) {
   const hasNote = Boolean(filename || title);
 
   return (
-    <div className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--bg-sidebar)]/90 px-3 text-[11px] text-[var(--text-faint)]">
-      <div className="flex min-w-0 items-center gap-2.5">
+    <div className="flex h-[var(--statusbar-h)] shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-sidebar)]/90 px-2 text-[10px] text-[var(--text-faint)]">
+      <div className="flex min-w-0 items-center gap-1.5">
         <SaveIndicator status={saveStatus} />
         {hasNote ? (
           <>
-            <span className="hidden h-3 w-px bg-[var(--border)] sm:block" />
+            <span className="hidden h-2.5 w-px bg-[var(--border)] sm:block" />
             <span
               className="truncate text-[var(--text-muted)]"
               title={filename ?? undefined}
@@ -31,7 +31,7 @@ export function StatusBar({ content, saveStatus, filename, title }: Props) {
         ) : null}
       </div>
       {hasNote ? (
-        <div className="flex shrink-0 items-center gap-2 tabular-nums">
+        <div className="flex shrink-0 items-center gap-1.5 tabular-nums">
           <span>
             {words.toLocaleString()} word{words === 1 ? "" : "s"}
           </span>

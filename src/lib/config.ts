@@ -2,9 +2,9 @@ import type { AppConfig, TabLayout, ThemeMode } from "../types";
 
 const THEMES: ThemeMode[] = ["system", "light", "dark"];
 
-export const SIDEBAR_MIN = 200;
-export const SIDEBAR_MAX = 480;
-export const SIDEBAR_DEFAULT = 280;
+export const SIDEBAR_MIN = 180;
+export const SIDEBAR_MAX = 420;
+export const SIDEBAR_DEFAULT = 240;
 
 /** Normalize any value from disk/IPC into a known layout. Legacy "vertical" → sidebar. */
 export function normalizeTabLayout(value: string | undefined | null): TabLayout {

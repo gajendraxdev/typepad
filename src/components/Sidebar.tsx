@@ -84,7 +84,7 @@ export function Sidebar({
 
   // Double-click resize handle → reset to default width
   const onResizeDoubleClick = useCallback(() => {
-    onWidthChange(280);
+    onWidthChange(240);
   }, [onWidthChange]);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ export function Sidebar({
 
   if (collapsed) {
     return (
-      <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-[var(--border)] bg-[var(--bg-sidebar)] py-3">
+      <div className="flex w-9 shrink-0 flex-col items-center gap-0.5 border-r border-[var(--border)] bg-[var(--bg-sidebar)] py-1.5">
         <button
           type="button"
           onClick={onToggle}
@@ -103,7 +103,7 @@ export function Sidebar({
           className="ui-icon-btn"
           aria-label="Expand sidebar"
         >
-          <IconPanelLeft size={16} />
+          <IconPanelLeft size={14} />
         </button>
         <button
           type="button"
@@ -112,7 +112,7 @@ export function Sidebar({
           className="ui-icon-btn text-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
           aria-label="New note"
         >
-          <IconPlus size={18} />
+          <IconPlus size={15} />
         </button>
       </div>
     );
@@ -122,12 +122,12 @@ export function Sidebar({
     <>
       <div className="sidebar-shell" style={{ width }}>
         <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--bg-sidebar)]">
-          <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1.5">
+          <div className="flex items-center justify-between gap-1 px-2 pt-1.5 pb-1">
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold tracking-[0.06em] text-[var(--text-faint)] uppercase">
+              <div className="text-[10px] font-semibold tracking-[0.05em] text-[var(--text-faint)] uppercase">
                 Library
               </div>
-              <div className="text-[11px] text-[var(--text-muted)] tabular-nums">
+              <div className="text-[10px] text-[var(--text-muted)] tabular-nums">
                 {notes.length} note{notes.length === 1 ? "" : "s"}
               </div>
             </div>
@@ -138,37 +138,37 @@ export function Sidebar({
               className="ui-icon-btn"
               aria-label="Collapse sidebar"
             >
-              <IconPanelLeft size={15} />
+              <IconPanelLeft size={13} />
             </button>
           </div>
 
-          <div className="px-3 pb-2">
+          <div className="px-2 pb-1">
             <button
               type="button"
               onClick={onNew}
-              className="ui-btn ui-btn-soft w-full justify-start !rounded-md !py-2"
+              className="ui-btn ui-btn-soft w-full justify-start !rounded-md !py-1.5"
             >
-              <IconPlus size={15} />
+              <IconPlus size={13} />
               New note
             </button>
           </div>
 
           <SearchBar ref={searchRef} value={query} onChange={onQueryChange} />
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
             {filtered.length === 0 ? (
-              <div className="anim-fade-in flex flex-col items-center gap-2 px-3 py-10 text-center">
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[var(--text-faint)]">
-                  <IconNote size={16} />
+              <div className="anim-fade-in flex flex-col items-center gap-1.5 px-2 py-6 text-center">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[var(--text-faint)]">
+                  <IconNote size={14} />
                 </div>
-                <p className="text-xs text-[var(--text-faint)]">
+                <p className="text-[11px] text-[var(--text-faint)]">
                   {notes.length === 0
                     ? "No notes yet"
                     : "No notes match that search"}
                 </p>
               </div>
             ) : (
-              <ul className="space-y-0.5">
+              <ul className="space-y-px">
                 {filtered.map((note) => {
                   const active = note.path === activePath;
                   const isOpen = openSet.has(note.path);
@@ -186,31 +186,22 @@ export function Sidebar({
                         }}
                         className={`note-item group ${active ? "is-active" : ""}`}
                       >
-                        <div className="flex items-start justify-between gap-2 pl-1">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            {isOpen && !active ? (
-                              <span
-                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]/50"
-                                title="Open in a tab"
-                              />
-                            ) : null}
-                            <p className="truncate text-[13px] font-semibold tracking-tight text-[var(--text)]">
+                        <div className="flex min-w-0 flex-1 items-center gap-1">
+                          {isOpen && !active ? (
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]/50"
+                              title="Open in a tab"
+                            />
+                          ) : null}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[12px] font-semibold tracking-tight text-[var(--text)]">
                               {note.title}
                             </p>
+                            <p className="mt-0.5 text-[10px] leading-none text-[var(--text-faint)] tabular-nums">
+                              {relativeTime(note.modifiedMs)}
+                            </p>
                           </div>
-                          <span className="mt-0.5 shrink-0 text-[10px] text-[var(--text-faint)] tabular-nums">
-                            {relativeTime(note.modifiedMs)}
-                          </span>
                         </div>
-                        {note.preview ? (
-                          <p className="mt-0.5 line-clamp-2 pl-1 text-[11.5px] leading-snug text-[var(--text-muted)]">
-                            {note.preview}
-                          </p>
-                        ) : (
-                          <p className="mt-0.5 pl-1 text-[11.5px] text-[var(--text-faint)] italic">
-                            Empty note
-                          </p>
-                        )}
                         <button
                           type="button"
                           title="Move to trash"
@@ -218,12 +209,10 @@ export function Sidebar({
                             e.stopPropagation();
                             setPendingDelete(note);
                           }}
-                          className="ui-icon-btn absolute right-1.5 bottom-1.5 h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                          className="note-item-delete"
+                          aria-label={`Delete ${note.title}`}
                         >
-                          <IconTrash
-                            size={13}
-                            className="text-[var(--danger)]"
-                          />
+                          <IconTrash size={16} />
                         </button>
                       </div>
                     </li>

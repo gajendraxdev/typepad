@@ -59,13 +59,18 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
+          # Ayatana only — do not also install libappindicator3-dev (package conflict).
           sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libssl-dev
 
       - name: Setup Node
         uses: actions/setup-node@v4

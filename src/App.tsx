@@ -312,6 +312,8 @@ export default function App() {
       sidebarVisible={sidebarOpen}
       activePinned={activeIsPinned}
       onTogglePinActive={notesApi.activePath ? toggleActivePin : undefined}
+      pinnedPaths={config?.pinnedNotePaths ?? []}
+      onTogglePinPath={togglePin}
     />
   );
 

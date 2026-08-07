@@ -56,6 +56,7 @@ export function Sidebar({
   const [pendingDelete, setPendingDelete] = useState<NoteMeta | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextState>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
   const resizing = useRef(false);
   const openSet = useMemo(() => new Set(openPaths), [openPaths]);
 
@@ -76,14 +77,14 @@ export function Sidebar({
   );
 
   const searching = query.trim().length > 0;
+  // Only reorder when the full pin list is visible (no search filter).
   const canReorder = !searching && sections.pinned.length > 1;
   const totalVisible = sections.pinned.length + sections.others.length;
 
   const openContext = useCallback(
     (note: NoteMeta, pinned: boolean, x: number, y: number) => {
-      // Keep menu inside the viewport.
-      const menuW = 180;
-      const menuH = 120;
+      const menuW = 200;
+      const menuH = 130;
       const left = Math.min(x, window.innerWidth - menuW - 8);
       const top = Math.min(y, window.innerHeight - menuH - 8);
       setContextMenu({
@@ -95,6 +96,25 @@ export function Sidebar({
     },
     [],
   );
+
+  /** Map visible pin row indices → real pinnedPaths indices (handles gaps). */
+  const reorderVisiblePins = useCallback(
+    (fromVisible: number, toVisible: number) => {
+      const fromPath = sections.pinned[fromVisible]?.path;
+      const toPath = sections.pinned[toVisible]?.path;
+      if (!fromPath || !toPath || fromPath === toPath) return;
+      const fromIndex = pinnedPaths.indexOf(fromPath);
+      const toIndex = pinnedPaths.indexOf(toPath);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+      onReorderPins(fromIndex, toIndex);
+    },
+    [sections.pinned, pinnedPaths, onReorderPins],
+  );
+
+  const clearDrag = useCallback(() => {
+    setDragFrom(null);
+    setDragOver(null);
+  }, []);
 
   const onResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -136,6 +156,11 @@ export function Sidebar({
     };
   }, []);
 
+  // Cancel drag UI if search starts mid-drag.
+  useEffect(() => {
+    if (searching) clearDrag();
+  }, [searching, clearDrag]);
+
   if (collapsed) {
     return (
       <div className="flex w-9 shrink-0 flex-col items-center gap-0.5 border-r border-[var(--border)] bg-[var(--bg-sidebar)] py-1.5">
@@ -174,21 +199,37 @@ export function Sidebar({
       pinned={pinned}
       draggable={canReorder && pinned && dragIndex !== undefined}
       dragIndex={dragIndex}
+      isDragging={dragFrom !== null && dragFrom === dragIndex}
+      isDropTarget={
+        dragFrom !== null &&
+        dragOver === dragIndex &&
+        dragFrom !== dragIndex
+      }
       onSelect={() => onSelect(note.path)}
       onTogglePin={() => onTogglePin(note.path)}
       onDelete={() => setPendingDelete(note)}
       onContextMenu={(x, y) => openContext(note, pinned, x, y)}
-      onDragStart={(index) => setDragFrom(index)}
-      onDragOver={() => undefined}
+      onDragStart={(index) => {
+        setDragFrom(index);
+        setDragOver(index);
+      }}
+      onDragOver={(index) => setDragOver(index)}
       onDrop={(toIndex) => {
         if (dragFrom !== null && dragFrom !== toIndex) {
-          onReorderPins(dragFrom, toIndex);
+          reorderVisiblePins(dragFrom, toIndex);
         }
-        setDragFrom(null);
+        clearDrag();
       }}
-      onDragEnd={() => setDragFrom(null)}
+      onDragEnd={clearDrag}
     />
   );
+
+  const emptyMessage =
+    notes.length === 0
+      ? "No notes yet — press Ctrl+N"
+      : searching
+        ? "No notes match that search"
+        : "No notes";
 
   return (
     <>
@@ -201,7 +242,7 @@ export function Sidebar({
               </div>
               <div className="text-[10px] text-[var(--text-muted)] tabular-nums">
                 {notes.length} note{notes.length === 1 ? "" : "s"}
-                {sections.pinned.length > 0
+                {sections.pinned.length > 0 || pinnedPaths.length > 0
                   ? ` · ${sections.pinned.length} pinned`
                   : ""}
               </div>
@@ -237,19 +278,26 @@ export function Sidebar({
                   <IconNote size={14} />
                 </div>
                 <p className="text-[11px] text-[var(--text-faint)]">
-                  {notes.length === 0
-                    ? "No notes yet"
-                    : "No notes match that search"}
+                  {emptyMessage}
                 </p>
+                {searching && pinnedPaths.length > 0 ? (
+                  <p className="text-[10px] text-[var(--text-faint)] opacity-80">
+                    Clear search to reorder pins
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 {sections.pinned.length > 0 ? (
-                  <section aria-label="Pinned notes">
+                  <section
+                    className="library-section is-pinned-section"
+                    aria-label="Pinned notes"
+                  >
                     <div className="library-section-label">
-                      <span>Pinned</span>
-                      <span className="tabular-nums opacity-70">
+                      <span>📌 {searching ? "Pinned matches" : "Pinned"}</span>
+                      <span className="tabular-nums opacity-80">
                         {sections.pinned.length}
+                        {canReorder ? " · drag ⋮⋮" : ""}
                       </span>
                     </div>
                     <ul className="space-y-px">
@@ -258,18 +306,26 @@ export function Sidebar({
                       )}
                     </ul>
                   </section>
+                ) : searching && pinnedPaths.length > 0 ? (
+                  <p className="px-1.5 py-1 text-[10px] text-[var(--text-faint)]">
+                    No pinned notes match
+                  </p>
                 ) : null}
 
                 {sections.others.length > 0 ? (
-                  <section aria-label="All notes">
-                    {sections.pinned.length > 0 ? (
-                      <div className="library-section-label">
-                        <span>{searching ? "Matches" : "Notes"}</span>
-                        <span className="tabular-nums opacity-70">
-                          {sections.others.length}
-                        </span>
-                      </div>
-                    ) : null}
+                  <section className="library-section" aria-label="All notes">
+                    <div className="library-section-label">
+                      <span>
+                        {searching
+                          ? sections.pinned.length > 0
+                            ? "Other matches"
+                            : "Matches"
+                          : "Notes"}
+                      </span>
+                      <span className="tabular-nums opacity-70">
+                        {sections.others.length}
+                      </span>
+                    </div>
                     <ul className="space-y-px">
                       {sections.others.map((note) => renderRow(note, false))}
                     </ul>

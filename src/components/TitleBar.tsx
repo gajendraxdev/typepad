@@ -27,6 +27,10 @@ interface Props {
   /** Whether the active note is pinned (title-bar pin control). */
   activePinned?: boolean;
   onTogglePinActive?: () => void;
+  /** Paths currently pinned (for tab badges). */
+  pinnedPaths?: string[];
+  /** Pin/unpin a specific path (tab context). */
+  onTogglePinPath?: (path: string) => void;
 }
 
 /**
@@ -46,8 +50,11 @@ export function TitleBar({
   sidebarVisible = false,
   activePinned = false,
   onTogglePinActive,
+  pinnedPaths = [],
+  onTogglePinPath,
 }: Props) {
   const [maximized, setMaximized] = useState(false);
+  const pinnedSet = new Set(pinnedPaths);
 
   useEffect(() => {
     const win = getCurrentWindow();
@@ -97,14 +104,19 @@ export function TitleBar({
               const active = tab.path === activePath;
               const dirty =
                 tab.saveStatus === "dirty" || tab.saveStatus === "saving";
+              const pinned = pinnedSet.has(tab.path);
               return (
                 <div
                   key={tab.path}
                   role="tab"
                   aria-selected={active}
                   tabIndex={0}
-                  className={`titlebar-tab ${active ? "is-active" : ""} ${dirty ? "is-dirty" : ""}`}
-                  title={tab.filename}
+                  className={`titlebar-tab ${active ? "is-active" : ""} ${dirty ? "is-dirty" : ""} ${pinned ? "is-pinned" : ""}`}
+                  title={
+                    pinned
+                      ? `${tab.filename} · pinned`
+                      : tab.filename
+                  }
                   onClick={() => onSelect(tab.path)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -118,7 +130,19 @@ export function TitleBar({
                       onClose(tab.path);
                     }
                   }}
+                  onContextMenu={(e) => {
+                    if (!onTogglePinPath) return;
+                    e.preventDefault();
+                    onTogglePinPath(tab.path);
+                  }}
                 >
+                  {pinned ? (
+                    <IconPin
+                      size={11}
+                      className="titlebar-tab-pin"
+                      aria-hidden
+                    />
+                  ) : null}
                   <span className="titlebar-tab-label">{tab.title}</span>
                   <button
                     type="button"

@@ -10,6 +10,10 @@ interface Props {
   pinned: boolean;
   draggable?: boolean;
   dragIndex?: number;
+  /** Visual: this row is being dragged. */
+  isDragging?: boolean;
+  /** Visual: drop target highlight. */
+  isDropTarget?: boolean;
   onSelect: () => void;
   onTogglePin: () => void;
   onDelete: () => void;
@@ -27,6 +31,8 @@ export function NoteListItem({
   pinned,
   draggable = false,
   dragIndex,
+  isDragging = false,
+  isDropTarget = false,
   onSelect,
   onTogglePin,
   onDelete,
@@ -49,17 +55,25 @@ export function NoteListItem({
 
   return (
     <li
-      className={draggable ? "note-list-draggable" : undefined}
+      className={[
+        draggable ? "note-list-draggable" : "",
+        isDragging ? "is-dragging" : "",
+        isDropTarget ? "is-drop-target" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       draggable={draggable}
       onDragStart={(e) => {
         if (!draggable || dragIndex === undefined) return;
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", String(dragIndex));
+        // Transparent drag image keeps the list tidy.
         onDragStart?.(dragIndex);
       }}
       onDragOver={(e) => {
         if (!draggable || dragIndex === undefined) return;
         e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
         onDragOver?.(dragIndex);
       }}
       onDrop={(e) => {
@@ -81,7 +95,6 @@ export function NoteListItem({
         }}
         onKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
-          // Let nested pin/delete buttons keep native activation.
           const target = e.target as HTMLElement | null;
           if (target?.closest("button")) return;
           e.preventDefault();
@@ -89,10 +102,23 @@ export function NoteListItem({
         }}
         onContextMenu={handleContextMenu}
         className={`note-item group ${active ? "is-active" : ""} ${pinned ? "is-pinned" : ""}`}
+        title={
+          pinned
+            ? `${note.title} · pinned · right-click for more`
+            : `${note.title} · right-click to pin`
+        }
       >
         {draggable ? (
-          <span className="note-drag-handle" title="Drag to reorder pins" aria-hidden>
+          <span
+            className="note-drag-handle"
+            title="Drag to reorder"
+            aria-hidden
+          >
             ⋮⋮
+          </span>
+        ) : pinned ? (
+          <span className="note-pin-marker" aria-hidden title="Pinned">
+            <IconPin size={10} />
           </span>
         ) : null}
 
@@ -108,7 +134,11 @@ export function NoteListItem({
         <div className="note-item-actions">
           <button
             type="button"
-            title={pinned ? "Unpin" : "Pin to top"}
+            title={
+              pinned
+                ? "Unpin (Ctrl+Shift+. when open)"
+                : "Pin to top (Ctrl+Shift+. when open)"
+            }
             onClick={(e) => {
               e.stopPropagation();
               ignoreClick.current = true;

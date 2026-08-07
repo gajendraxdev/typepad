@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { IconTrash } from "./icons";
+import { IconPin, IconPinOff, IconTrash } from "./icons";
 
 interface Props {
   open: boolean;
@@ -10,6 +10,13 @@ interface Props {
   onPin: () => void;
   onDelete: () => void;
   onClose: () => void;
+}
+
+function isMac(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    navigator.platform.toLowerCase().includes("mac")
+  );
 }
 
 /** Lightweight right-click menu for a library note row. */
@@ -24,6 +31,7 @@ export function NoteContextMenu({
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const pinShortcut = isMac() ? "⌘⇧." : "Ctrl+Shift+.";
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +59,9 @@ export function NoteContextMenu({
       style={{ top: y, left: x }}
       role="menu"
     >
+      <p className="note-context-hint truncate" title={title}>
+        {title}
+      </p>
       <button
         type="button"
         role="menuitem"
@@ -60,7 +71,11 @@ export function NoteContextMenu({
           onClose();
         }}
       >
-        {pinned ? "Unpin note" : "Pin note"}
+        {pinned ? <IconPin size={13} /> : <IconPinOff size={13} />}
+        <span className="flex-1 text-left">
+          {pinned ? "Unpin note" : "Pin to top"}
+        </span>
+        <kbd className="note-context-kbd">{pinShortcut}</kbd>
       </button>
       <div className="note-context-sep" role="separator" />
       <button
@@ -75,9 +90,6 @@ export function NoteContextMenu({
         <IconTrash size={13} />
         Move to trash
       </button>
-      <p className="note-context-hint truncate" title={title}>
-        {title}
-      </p>
     </div>
   );
 }

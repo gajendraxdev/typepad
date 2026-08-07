@@ -161,7 +161,7 @@ pub fn list_notes(folder: &Path) -> AppResult<Vec<NoteMeta>> {
             modified_ms: modified_ms(&meta),
         });
     }
-    notes.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
+    notes.sort_by_key(|b| std::cmp::Reverse(b.modified_ms));
     Ok(notes)
 }
 

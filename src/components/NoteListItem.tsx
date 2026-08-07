@@ -120,7 +120,20 @@ export function NoteListItem({
           }
           onSelect();
         }}
-        className={`note-item group ${active ? "is-active" : ""} ${focused && !active ? "is-focused" : ""} ${pinned ? "is-pinned" : ""}`}
+        className={[
+          "note-item group",
+          active ? "is-active" : "",
+          focused && !active ? "is-focused" : "",
+          pinned ? "is-pinned" : "",
+          isOpen && !active ? "is-open-tab" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        title={
+          isOpen && !active
+            ? `${note.title} · open in a tab`
+            : note.title
+        }
       >
         {canDrag && dragIndex !== undefined ? (
           <span
@@ -161,10 +174,6 @@ export function NoteListItem({
           <p className="note-item-title">{note.title}</p>
           <span className="note-item-time">{relativeTime(note.modifiedMs)}</span>
         </div>
-
-        {isOpen && !active ? (
-          <span className="note-open-dot" title="Open in a tab" />
-        ) : null}
 
         <div className="note-item-actions">
           <button

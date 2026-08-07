@@ -130,3 +130,44 @@ export function isPinned(pinnedPaths: string[], path: string): boolean {
   const norm = normalizeFsPath(path);
   return pinnedPaths.some((p) => samePath(p, norm));
 }
+
+export function isLockedName(lockedPaths: string[], path: string): boolean {
+  return isPinned(lockedPaths, path);
+}
+
+/** Add path to locked set (normalized, de-duped). */
+export function lockNotePath(lockedPaths: string[], path: string): string[] {
+  const norm = normalizeFsPath(path);
+  if (lockedPaths.some((p) => samePath(p, norm))) {
+    return lockedPaths.map(normalizeFsPath);
+  }
+  return [...lockedPaths.map(normalizeFsPath), norm];
+}
+
+/** Remap a locked path after rename (same as pin remap). */
+export function remapLockedPath(
+  lockedPaths: string[],
+  oldPath: string,
+  newPath: string,
+): string[] {
+  return remapPinnedPath(lockedPaths, oldPath, newPath);
+}
+
+export function removeLockedPath(
+  lockedPaths: string[],
+  path: string,
+): string[] {
+  return removePinnedPath(lockedPaths, path);
+}
+
+/** Library label: locked notes show file stem; others show first-line title. */
+export function displayNoteTitle(
+  note: { path: string; filename: string; title: string },
+  lockedPaths: string[],
+): string {
+  if (!isLockedName(lockedPaths, note.path)) {
+    return note.title;
+  }
+  const stem = note.filename.replace(/\.txt$/i, "").trim();
+  return stem || note.title;
+}

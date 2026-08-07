@@ -48,6 +48,7 @@ pub fn run() {
             commands::read_note_cmd,
             commands::create_note_cmd,
             commands::save_note_cmd,
+            commands::rename_note_cmd,
             commands::trash_note_cmd,
         ])
         .run(tauri::generate_context!())

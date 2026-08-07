@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SIDEBAR_MAX, SIDEBAR_MIN } from "../lib/config";
 import {
+  displayNoteTitle,
   normalizeFsPath,
   noteOptionId,
   splitLibraryNotes,
@@ -25,12 +26,14 @@ interface Props {
   activePath: string | null;
   openPaths: string[];
   pinnedPaths: string[];
+  lockedNotePaths: string[];
   query: string;
   onQueryChange: (q: string) => void;
   onSelect: (path: string) => void;
   onNew: () => void;
   onDelete: (path: string) => void;
   onTogglePin: (path: string) => void;
+  onRename: (path: string) => void;
   /** Reorder within the pinned list (indices into pinnedPaths). */
   onReorderPins: (fromIndex: number, toIndex: number) => void;
   searchRef: React.RefObject<HTMLInputElement | null>;
@@ -56,12 +59,14 @@ export function Sidebar({
   activePath,
   openPaths,
   pinnedPaths,
+  lockedNotePaths,
   query,
   onQueryChange,
   onSelect,
   onNew,
   onDelete,
   onTogglePin,
+  onRename,
   onReorderPins,
   searchRef,
   collapsed,
@@ -236,8 +241,13 @@ export function Sidebar({
         onTogglePin(focusPath);
         return;
       }
+      if (e.key === "F2" && focusPath) {
+        e.preventDefault();
+        onRename(focusPath);
+        return;
+      }
     },
-    [moveFocus, focusPath, onSelect, onTogglePin, navNotes],
+    [moveFocus, focusPath, onSelect, onTogglePin, onRename, navNotes],
   );
 
   const onResizePointerDown = useCallback(
@@ -316,10 +326,14 @@ export function Sidebar({
   ) => {
     const focused =
       !!focusPath && pathKey(note.path) === pathKey(focusPath);
+    const displayNote: NoteMeta = {
+      ...note,
+      title: displayNoteTitle(note, lockedNotePaths),
+    };
     return (
       <NoteListItem
         key={note.path}
-        note={note}
+        note={displayNote}
         active={!!activePath && pathKey(note.path) === pathKey(activePath)}
         focused={focused}
         isOpen={openSet.has(pathKey(note.path))}
@@ -520,6 +534,9 @@ export function Sidebar({
         title={contextMenu?.note.title ?? ""}
         onPin={() => {
           if (contextMenu) onTogglePin(contextMenu.note.path);
+        }}
+        onRename={() => {
+          if (contextMenu) onRename(contextMenu.note.path);
         }}
         onDelete={() => {
           if (contextMenu) setPendingDelete(contextMenu.note);

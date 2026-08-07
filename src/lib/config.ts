@@ -65,6 +65,8 @@ export function normalizeConfig(raw: AppConfig): AppConfig {
     sidebarOpen: raw.sidebarOpen ?? true,
     sidebarWidth: normalizeSidebarWidth(raw.sidebarWidth),
     pinnedNotePaths: normalizePinnedPaths(raw.pinnedNotePaths),
+    // Same normalization as pins (path equality on Windows).
+    lockedNotePaths: normalizePinnedPaths(raw.lockedNotePaths),
     markdownPreview: raw.markdownPreview ?? false,
   };
 }

@@ -1,6 +1,6 @@
 [package]
 name = "typepad"
-version = "0.1.0"
+version = "0.1.1"
 description = "Native desktop notepad with zero-friction auto-save"
 authors = ["you"]
 edition = "2021"

@@ -5,6 +5,7 @@ import { FirstRunDialog } from "./components/FirstRunDialog";
 import { SettingsModal } from "./components/SettingsModal";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
+import { RenameDialog } from "./components/RenameDialog";
 import { TitleBar } from "./components/TitleBar";
 import { Toast } from "./components/Toast";
 import { UpdateBanner } from "./components/UpdateBanner";
@@ -20,9 +21,13 @@ import {
 } from "./lib/config";
 import {
   isPinned,
+  lockNotePath,
   movePinnedPath,
+  normalizeFsPath,
   prunePinnedPaths,
+  remapLockedPath,
   remapPinnedPath,
+  removeLockedPath,
   removePinnedPath,
   togglePinnedPath,
 } from "./lib/notes";
@@ -46,6 +51,7 @@ export default function App() {
   /** Bumped to focus library search after sidebar mounts/expands. */
   const [searchFocusReq, setSearchFocusReq] = useState(0);
   const [pinToast, setPinToast] = useState<PinToast | null>(null);
+  const [renamePath, setRenamePath] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<EditorHandle>(null);
   const widthSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,12 +96,22 @@ export default function App() {
       void persistConfig({
         ...prev,
         pinnedNotePaths: remapPinnedPath(prev.pinnedNotePaths, oldPath, newPath),
+        lockedNotePaths: remapLockedPath(prev.lockedNotePaths, oldPath, newPath),
       });
     },
     [persistConfig],
   );
 
-  const notesApi = useNotes(ready, { onPathRenamed: handlePathRenamed });
+  const isNameLocked = useCallback((path: string) => {
+    const prev = configRef.current;
+    if (!prev) return false;
+    return isPinned(prev.lockedNotePaths, path);
+  }, []);
+
+  const notesApi = useNotes(ready, {
+    onPathRenamed: handlePathRenamed,
+    isNameLocked,
+  });
 
   useTheme(config?.theme ?? "system");
   useWindowCloseFlush(notesApi.flushAllDirty);
@@ -170,14 +186,20 @@ export default function App() {
 
   const { newNote, closeNote, selectTab, closeTab, flushAllDirty } = notesApi;
 
-  // Drop pins for deleted files — but NEVER prune before the library list
-  // has loaded, or a temporary empty list would wipe all pins to disk.
+  // Drop pins/locks for deleted files — never before the library list loads.
   useEffect(() => {
     if (!config || !ready || !notesApi.listHydrated) return;
-    if (config.pinnedNotePaths.length === 0) return;
-    const pruned = prunePinnedPaths(config.pinnedNotePaths, notesApi.notes);
-    if (pruned.length !== config.pinnedNotePaths.length) {
-      void persistConfig({ ...config, pinnedNotePaths: pruned });
+    const nextPins = prunePinnedPaths(config.pinnedNotePaths, notesApi.notes);
+    const nextLocks = prunePinnedPaths(config.lockedNotePaths, notesApi.notes);
+    if (
+      nextPins.length !== config.pinnedNotePaths.length ||
+      nextLocks.length !== config.lockedNotePaths.length
+    ) {
+      void persistConfig({
+        ...config,
+        pinnedNotePaths: nextPins,
+        lockedNotePaths: nextLocks,
+      });
     }
   }, [config, notesApi.notes, notesApi.listHydrated, ready, persistConfig]);
 
@@ -242,11 +264,57 @@ export default function App() {
       const prev = configRef.current;
       if (!prev) return;
       const nextPins = removePinnedPath(prev.pinnedNotePaths, path);
-      if (nextPins.length !== prev.pinnedNotePaths.length) {
-        applyPinnedPaths(nextPins);
+      const nextLocks = removeLockedPath(prev.lockedNotePaths, path);
+      if (
+        nextPins.length !== prev.pinnedNotePaths.length ||
+        nextLocks.length !== prev.lockedNotePaths.length
+      ) {
+        void persistConfig({
+          ...prev,
+          pinnedNotePaths: nextPins,
+          lockedNotePaths: nextLocks,
+        });
       }
     },
-    [notesApi, applyPinnedPaths],
+    [notesApi, persistConfig],
+  );
+
+  const openRename = useCallback((path: string) => {
+    setRenamePath(path);
+  }, []);
+
+  const renameInitialName = useMemo(() => {
+    if (!renamePath) return "";
+    const key = renamePath;
+    const meta = notesApi.notes.find(
+      (n) => normalizeFsPath(n.path) === normalizeFsPath(key),
+    );
+    const tab = notesApi.tabs.find(
+      (t) => normalizeFsPath(t.path) === normalizeFsPath(key),
+    );
+    const filename = meta?.filename ?? tab?.filename ?? "";
+    return filename.replace(/\.txt$/i, "") || tab?.title || meta?.title || "";
+  }, [renamePath, notesApi.notes, notesApi.tabs]);
+
+  const confirmRename = useCallback(
+    async (name: string) => {
+      if (!renamePath) return;
+      const path = renamePath;
+      setRenamePath(null);
+      try {
+        // renameNote remaps pins/locks via onPathRenamed; we only lock the name.
+        const result = await notesApi.renameNote(path, name);
+        const prev = configRef.current;
+        if (!prev) return;
+        void persistConfig({
+          ...prev,
+          lockedNotePaths: lockNotePath(prev.lockedNotePaths, result.path),
+        });
+      } catch {
+        // Error surface via notesApi.error banner.
+      }
+    },
+    [renamePath, notesApi, persistConfig],
   );
 
   const toggleMarkdownPreview = useCallback(() => {
@@ -394,10 +462,12 @@ export default function App() {
               const normalized = normalizeConfig({
                 ...next,
                 pinnedNotePaths: [],
+                lockedNotePaths: [],
               });
               configRef.current = normalized;
               setConfig(normalized);
               setPinToast(null);
+              setRenamePath(null);
               await api.updateConfig(normalized).catch(() => undefined);
               await notesApi.resetAfterFolderChange();
             } else {
@@ -420,18 +490,27 @@ export default function App() {
         onDismiss={dismissPinToast}
       />
 
+      <RenameDialog
+        open={!!renamePath}
+        initialName={renameInitialName}
+        onCancel={() => setRenamePath(null)}
+        onConfirm={(name) => void confirmRename(name)}
+      />
+
       <div className="app-body">
         <Sidebar
           notes={notesApi.notes}
           activePath={notesApi.activePath}
           openPaths={notesApi.tabs.map((t) => t.path)}
           pinnedPaths={config?.pinnedNotePaths ?? []}
+          lockedNotePaths={config?.lockedNotePaths ?? []}
           query={query}
           onQueryChange={setQuery}
           onSelect={(path) => void notesApi.openNote(path)}
           onNew={() => void notesApi.newNote()}
           onDelete={(path) => void handleDeleteNote(path)}
           onTogglePin={togglePin}
+          onRename={openRename}
           onReorderPins={reorderPins}
           searchRef={searchRef}
           collapsed={!sidebarOpen}

@@ -41,6 +41,9 @@ pub struct AppConfig {
     /// Absolute paths of notes pinned to the top of the library list.
     #[serde(default)]
     pub pinned_note_paths: Vec<String>,
+    /// Notes whose filename is user-controlled (skip auto-rename from first line).
+    #[serde(default)]
+    pub locked_note_paths: Vec<String>,
     /// When true, the editor shows rendered markdown instead of raw text.
     #[serde(default)]
     pub markdown_preview: bool,
@@ -57,6 +60,7 @@ impl Default for AppConfig {
             tab_layout: default_tab_layout(),
             sidebar_width: default_sidebar_width(),
             pinned_note_paths: Vec::new(),
+            locked_note_paths: Vec::new(),
             markdown_preview: false,
         }
     }
@@ -141,11 +145,13 @@ mod tests {
             "tabLayout": "sidebar",
             "sidebarWidth": 240,
             "pinnedNotePaths": ["/notes/ideas.txt"],
+            "lockedNotePaths": ["/notes/manual.txt"],
             "markdownPreview": true
         }"#;
         fs::write(config_file_path(dir.path()), raw).unwrap();
         let cfg = load_config(dir.path()).unwrap();
         assert_eq!(cfg.pinned_note_paths, vec!["/notes/ideas.txt"]);
+        assert_eq!(cfg.locked_note_paths, vec!["/notes/manual.txt"]);
         assert!(cfg.markdown_preview);
     }
 

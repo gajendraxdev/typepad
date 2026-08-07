@@ -573,13 +573,10 @@ input[type="search"] {
   font-variant-numeric: tabular-nums;
 }
 
-.note-open-dot {
-  margin-top: 0.35rem;
-  width: 0.35rem;
-  height: 0.35rem;
-  flex-shrink: 0;
-  border-radius: 99px;
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
+/* Open-in-a-tab (not active): no floating accent dot — keep row calm. */
+.note-item.is-open-tab:not(.is-active) .note-item-title {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .note-drag-handle {
@@ -815,6 +812,65 @@ input[type="search"] {
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+/* Rename dialog */
+.rename-dialog {
+  width: min(360px, calc(100vw - 2rem));
+  padding: 1rem 1.1rem 0.9rem;
+}
+
+.rename-dialog-title {
+  margin: 0 0 0.35rem;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.rename-dialog-hint {
+  margin: 0 0 0.85rem;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.rename-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.rename-dialog-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  padding: 0.35rem 0.55rem;
+}
+
+.rename-dialog-input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.rename-dialog-ext {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.rename-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
 }
 
 /* Undo toast */

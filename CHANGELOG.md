@@ -4,9 +4,49 @@ All notable changes to Typepad are documented here.
 
 Format inspired by [Keep a Changelog](https://keepachangelog.com/). Versions follow [SemVer](https://semver.org/).
 
-## [0.1.0] — 2026-08-07 (draft)
+## [0.1.1] — 2026-08-08
 
-First public draft release of Typepad.
+Library polish, pin reliability, manual rename, and quality fixes since the first public release.
+
+### Added
+- **Manual rename** (F2 or right‑click → Rename…)
+  - First line still drives the filename by default
+  - After a manual rename, the name is **locked** (editing the first line no longer renames the file)
+  - Locked notes show the file name in the library
+- **Library keyboard navigation**: ↑/↓, Home/End, Enter to open, `P` to pin focused row
+- **Collapsible Pinned section** (chevron header; count when collapsed; remembered)
+- **Undo toast** after pin / unpin
+- Scroll library row into view when switching tabs
+
+### Changed
+- Simpler pin UX (Notion-style): hover pin, context menu, **Ctrl+Shift+L** — no title-bar pin button
+- Plain section headers (no tinted pinned block)
+- Removed floating “open in tab” accent dot from list rows
+- Markdown HTML sanitization via **sanitize-html** (replaces isomorphic-dompurify for reliable CI)
+
+### Fixed
+- **Pins surviving restart**: no longer wiped when prune ran before the note list finished loading
+- **Windows path matching** (`\\?\` vs normal paths) so pin / unlock / list stay consistent
+- Pin drag-and-drop on Windows (`dragDropEnabled: false` so HTML5 reorder works)
+- Context menu positioning and click reliability
+- Shortcut key-repeat no longer flip-flops toggles (except find next/prev)
+- Config pin-path trim/dedupe; listbox a11y (`aria-activedescendant`, stable option ids)
+
+### Security / reliability
+- Path sandbox for note I/O unchanged; rename goes through the same folder checks
+- Folder change clears pins and locked names (old absolute paths are invalid)
+
+### Known limitations
+- Not OS code-signed (SmartScreen / Gatekeeper may warn)
+- No UI yet to “unlock” a name back to first-line auto-rename
+- No system-tray quick note or PDF export yet
+- No external file watcher
+
+---
+
+## [0.1.0] — 2026-08-07
+
+First public release of Typepad.
 
 ### Added
 - Native desktop shell via **Tauri v2** (Windows / macOS / Linux)
@@ -17,31 +57,18 @@ First public draft release of Typepad.
 - **Open-note tabs** in a custom title bar
 - **In-note find** (Ctrl+F) with next/prev (F3 / Ctrl+G)
 - **Pin notes** to the top of the library
-  - Pinned / Notes sections
-  - Hover pin, right-click menu, title-bar pin, **Ctrl+Shift+.**
-  - Drag-to-reorder pins (when not searching)
-- **Markdown preview** (status bar + **Ctrl+Shift+P**); HTML sanitized before render
-- Settings: theme (system/light/dark), font family/size, notes folder (move or re-point)
+- **Markdown preview** (status bar + **Ctrl+Shift+P**)
+- Settings: theme (system/light/dark), font family/size, notes folder
 - Soft delete to OS Recycle Bin / Trash
 - Save indicator, word/character counts
 - First-run notes folder picker
 - Unit tests (Rust + Vitest) and GitHub Actions CI
-
-### Security / reliability
-- Config writes serialized to avoid pin/width races
-- Markdown preview sanitized with DOMPurify
-- Path resolution constrained under the configured notes folder
 - **Auto-updater** with minisign-verified GitHub Releases (`latest.json`)
 
-### Known limitations
-- Not OS code-signed (SmartScreen / Gatekeeper may warn)
-- No system-tray quick note or PDF export yet (planned)
-- No external file watcher (edits from other apps need re-open/refresh)
-
 ### Install (from GitHub Release assets)
-- **Windows:** run the `.msi` (or `.exe`) installer
-- **macOS:** open the `.dmg`, drag Typepad to Applications (Apple Silicon vs Intel assets)
-- **Linux:** install the `.deb` or run the `.AppImage`
+- **Windows:** `.msi` / `.exe`
+- **macOS:** `.dmg` (Apple Silicon + Intel)
+- **Linux:** `.deb` / `.AppImage`
 
 ---
 
@@ -52,5 +79,7 @@ First public draft release of Typepad.
 - Export note as PDF
 - Folder watcher for external edits
 - Optional OS code signing (Authenticode / notarization)
+- Unlock manual name (return to first-line auto-rename)
 
+[0.1.1]: https://github.com/gajendraxdev/typepad/releases/tag/v0.1.1
 [0.1.0]: https://github.com/gajendraxdev/typepad/releases/tag/v0.1.0

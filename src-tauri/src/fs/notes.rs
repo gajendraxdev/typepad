@@ -217,11 +217,15 @@ fn unique_path(folder: &Path, filename: &str) -> PathBuf {
     ))
 }
 
-/// Save note content. Renames the file when the derived filename changes.
+/// Save note content. Optionally renames when the first-line-derived filename changes.
 ///
-/// `current_path`: existing file path (None for brand-new writes that already have a path is not used —
-/// always pass the open note's path).
-pub fn save_note(folder: &Path, current_path: &Path, content: &str) -> AppResult<SaveResult> {
+/// When `auto_rename` is false (manual name locked), only content is written.
+pub fn save_note(
+    folder: &Path,
+    current_path: &Path,
+    content: &str,
+    auto_rename: bool,
+) -> AppResult<SaveResult> {
     ensure_notes_dir(folder)?;
 
     if !current_path.exists() {
@@ -245,7 +249,7 @@ pub fn save_note(folder: &Path, current_path: &Path, content: &str) -> AppResult
     let mut target_path = current_path.to_path_buf();
     let mut renamed = false;
 
-    if desired_name != current_name {
+    if auto_rename && desired_name != current_name {
         let mut new_path = folder.join(&desired_name);
         // Avoid clobbering a different note that already uses that name.
         if new_path.exists() && new_path != current_path {
@@ -258,15 +262,61 @@ pub fn save_note(folder: &Path, current_path: &Path, content: &str) -> AppResult
 
     fs::write(&target_path, content)?;
 
+    let filename = target_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&desired_name)
+        .to_string();
+
     Ok(SaveResult {
         path: path_to_api(&target_path),
-        filename: target_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&desired_name)
-            .to_string(),
+        filename,
         title: title_from_content(content),
         renamed,
+    })
+}
+
+/// Manually rename a note file (user-chosen stem). Does not change content.
+pub fn rename_note(folder: &Path, current_path: &Path, new_stem: &str) -> AppResult<SaveResult> {
+    ensure_notes_dir(folder)?;
+    if !current_path.exists() {
+        return Err(AppError::NoteNotFound(current_path.display().to_string()));
+    }
+
+    let stem = crate::fs::filename::sanitize_stem(new_stem);
+    if stem.is_empty() {
+        return Err(AppError::InvalidPath("name cannot be empty".into()));
+    }
+    let desired_name = format!("{stem}.txt");
+    let current_name = current_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let target_path = if desired_name == current_name {
+        current_path.to_path_buf()
+    } else {
+        let mut new_path = folder.join(&desired_name);
+        if new_path.exists() && new_path != current_path {
+            new_path = unique_path(folder, &desired_name);
+        }
+        fs::rename(current_path, &new_path)?;
+        new_path
+    };
+
+    let filename = target_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&desired_name)
+        .to_string();
+
+    Ok(SaveResult {
+        path: path_to_api(&target_path),
+        filename,
+        // UI uses this as the display title for locked (manually named) notes.
+        title: stem,
+        renamed: path_to_api(&target_path) != path_to_api(current_path),
     })
 }
 
@@ -336,19 +386,19 @@ mod tests {
         let note = create_note(dir.path()).unwrap();
         let original = PathBuf::from(&note.path);
 
-        let r1 = save_note(dir.path(), &original, "Hello world\nbody").unwrap();
+        let r1 = save_note(dir.path(), &original, "Hello world\nbody", true).unwrap();
         assert!(r1.renamed);
         assert_eq!(r1.filename, "Hello world.txt");
         assert!(!original.exists());
         assert!(Path::new(&r1.path).exists());
 
         // Same title → no rename
-        let r2 = save_note(dir.path(), Path::new(&r1.path), "Hello world\nbody more").unwrap();
+        let r2 = save_note(dir.path(), Path::new(&r1.path), "Hello world\nbody more", true).unwrap();
         assert!(!r2.renamed);
         assert_eq!(r2.filename, "Hello world.txt");
 
         // Title change → rename again, no duplicate of old name
-        let r3 = save_note(dir.path(), Path::new(&r2.path), "Shopping\nmilk").unwrap();
+        let r3 = save_note(dir.path(), Path::new(&r2.path), "Shopping\nmilk", true).unwrap();
         assert!(r3.renamed);
         assert_eq!(r3.filename, "Shopping.txt");
         assert!(!Path::new(&r2.path).exists());
@@ -363,7 +413,7 @@ mod tests {
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
         assert!(stem.starts_with("Untitled-"));
 
-        let r = save_note(dir.path(), &path, "\njust body").unwrap();
+        let r = save_note(dir.path(), &path, "\njust body", true).unwrap();
         // Should keep Untitled-* rather than invent a new timestamp when possible
         assert!(r.filename.starts_with("Untitled-"));
         assert_eq!(list_notes(dir.path()).unwrap().len(), 1);
@@ -396,6 +446,25 @@ mod tests {
         let note = create_note(folder.path()).unwrap();
         let ok = assert_note_path(folder.path(), Path::new(&note.path)).unwrap();
         assert!(ok.exists());
+    }
+
+    #[test]
+    fn rename_note_sets_filename_and_skips_content_change() {
+        let dir = tempdir().unwrap();
+        let note = create_note(dir.path()).unwrap();
+        let path = PathBuf::from(&note.path);
+        fs::write(&path, "First line from content\nbody").unwrap();
+        let r = rename_note(dir.path(), &path, "My Custom Name").unwrap();
+        assert!(r.filename.starts_with("My Custom Name"));
+        assert!(r.filename.ends_with(".txt"));
+        assert!(Path::new(&r.path).exists());
+        // Content unchanged
+        let body = fs::read_to_string(&r.path).unwrap();
+        assert!(body.starts_with("First line from content"));
+        // Auto-save with auto_rename=false keeps name
+        let r2 = save_note(dir.path(), Path::new(&r.path), "Other title\nbody", false).unwrap();
+        assert_eq!(r2.filename, r.filename);
+        assert!(!r2.renamed);
     }
 
     #[test]

@@ -9,6 +9,7 @@ interface Props {
   pinned: boolean;
   title: string;
   onPin: () => void;
+  onRename: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -28,6 +29,7 @@ export function NoteContextMenu({
   pinned,
   title,
   onPin,
+  onRename,
   onDelete,
   onClose,
 }: Props) {
@@ -106,6 +108,21 @@ export function NoteContextMenu({
           {pinned ? "Unpin note" : "Pin to top"}
         </span>
         <kbd className="note-context-kbd">{pinShortcut}</kbd>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="note-context-item"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onRename();
+          onClose();
+        }}
+      >
+        <span className="note-context-item-label">Rename…</span>
+        <kbd className="note-context-kbd">F2</kbd>
       </button>
       <div className="note-context-sep" role="separator" />
       <button

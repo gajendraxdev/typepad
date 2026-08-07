@@ -10,6 +10,11 @@ export interface AppConfig {
   sidebarWidth: number;
   /** Absolute paths pinned to the top of the library. */
   pinnedNotePaths: string[];
+  /**
+   * Notes with a user-chosen filename.
+   * While locked, auto-rename from the first line is disabled.
+   */
+  lockedNotePaths: string[];
   /** Show rendered markdown instead of raw text in the editor. */
   markdownPreview: boolean;
 }

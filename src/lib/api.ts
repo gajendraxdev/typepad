@@ -46,6 +46,14 @@ export async function saveNote(
   return invoke<SaveResult>("save_note_cmd", { args: { path, content } });
 }
 
+/** Manual rename (locks filename away from first-line auto-rename). */
+export async function renameNote(
+  path: string,
+  name: string,
+): Promise<SaveResult> {
+  return invoke<SaveResult>("rename_note_cmd", { args: { path, name } });
+}
+
 export async function trashNote(path: string): Promise<void> {
   return invoke<void>("trash_note_cmd", { path });
 }

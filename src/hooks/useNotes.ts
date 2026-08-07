@@ -34,6 +34,8 @@ function neighborPath(
 export interface UseNotesOptions {
   /** Called when auto-save renames a note file after a title change. */
   onPathRenamed?: (oldPath: string, newPath: string) => void;
+  /** When true, tab title stays on the file name (manual rename locked). */
+  isNameLocked?: (path: string) => boolean;
 }
 
 export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
@@ -57,6 +59,8 @@ export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
   const pendingResave = useRef<Set<string>>(new Set());
   const onPathRenamedRef = useRef(options.onPathRenamed);
   onPathRenamedRef.current = options.onPathRenamed;
+  const isNameLockedRef = useRef(options.isNameLocked);
+  isNameLockedRef.current = options.isNameLocked;
 
   tabsRef.current = tabs;
   activePathRef.current = activePath;
@@ -353,17 +357,61 @@ export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
     [clearTimer, ensureSaved, refreshList],
   );
 
+  /**
+   * Manually rename the file. Caller should lock the name in config.
+   * Saves dirty content first so nothing is lost.
+   */
+  const renameNote = useCallback(
+    async (path: string, name: string) => {
+      await ensureSaved(path);
+      clearTimer(path);
+      try {
+        const result = await api.renameNote(path, name);
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.path === path
+              ? {
+                  ...t,
+                  path: result.path,
+                  filename: result.filename,
+                  title: result.title,
+                }
+              : t,
+          ),
+        );
+        if (activePathRef.current === path) {
+          activePathRef.current = result.path;
+          setActivePath(result.path);
+        }
+        if (result.path !== path) {
+          onPathRenamedRef.current?.(path, result.path);
+        }
+        await refreshList();
+        setError(null);
+        return result;
+      } catch (e) {
+        setError(String(e));
+        throw e;
+      }
+    },
+    [clearTimer, ensureSaved, refreshList],
+  );
+
   const updateDraft = useCallback(
     (value: string) => {
       const path = activePathRef.current;
       if (!path) return;
+      const locked = isNameLockedRef.current?.(path) ?? false;
       setTabs((prev) =>
         prev.map((t) =>
           t.path === path
             ? {
                 ...t,
                 draft: value,
-                title: titleFromDraft(value),
+                // Locked names: keep file-stem title; don't follow first line.
+                title: locked
+                  ? t.filename.replace(/\.txt$/i, "") || t.title
+                  : titleFromDraft(value),
                 saveStatus: "dirty" as SaveStatus,
               }
             : t,
@@ -417,6 +465,7 @@ export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
     closeTab,
     selectTab,
     deleteNote,
+    renameNote,
     updateDraft,
     flushSave,
     flushAllDirty,

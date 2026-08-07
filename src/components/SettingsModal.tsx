@@ -84,6 +84,7 @@ const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: "↑ / ↓", action: "Move in library list" },
   { keys: "Enter", action: "Open focused library note" },
   { keys: "P", action: "Pin focused library note" },
+  { keys: "F2", action: "Rename focused library note" },
   { keys: "Ctrl+W", action: "Close current tab" },
   { keys: "Ctrl+B", action: "Toggle library sidebar" },
   { keys: "Ctrl+,", action: "Open settings" },

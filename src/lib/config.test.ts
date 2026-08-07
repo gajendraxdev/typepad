@@ -17,6 +17,7 @@ const baseConfig: AppConfig = {
   sidebarOpen: true,
   sidebarWidth: 240,
   pinnedNotePaths: [],
+  lockedNotePaths: [],
   markdownPreview: false,
 };
 

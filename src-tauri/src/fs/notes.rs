@@ -41,6 +41,26 @@ pub struct SaveResult {
 /// Bytes to read when building sidebar title/preview (full content only via `read_note`).
 pub const META_READ_LIMIT: usize = 8 * 1024;
 
+/// Serialize paths for the frontend without Windows `\\?\` extended prefixes.
+///
+/// `canonicalize()` returns `\\?\C:\...` on Windows; `read_dir` does not. Mixed
+/// forms break pin matching (toggle always *adds*, prune immediately drops).
+pub fn path_to_api(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    strip_extended_prefix(&raw).into_owned()
+}
+
+fn strip_extended_prefix(s: &str) -> std::borrow::Cow<'_, str> {
+    // `\\?\C:\...` and `\\?\UNC\server\share\...`
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        if let Some(unc) = rest.strip_prefix(r"UNC\") {
+            return std::borrow::Cow::Owned(format!(r"\\{unc}"));
+        }
+        return std::borrow::Cow::Borrowed(rest);
+    }
+    std::borrow::Cow::Borrowed(s)
+}
+
 fn ensure_notes_dir(folder: &Path) -> AppResult<()> {
     if !folder.exists() {
         fs::create_dir_all(folder)?;
@@ -134,7 +154,7 @@ pub fn list_notes(folder: &Path) -> AppResult<Vec<NoteMeta>> {
             .unwrap_or("note.txt")
             .to_string();
         notes.push(NoteMeta {
-            path: path.to_string_lossy().into_owned(),
+            path: path_to_api(&path),
             filename,
             title: title_from_content(&content),
             preview: preview_from_content(&content),
@@ -157,7 +177,7 @@ pub fn read_note(path: &Path) -> AppResult<Note> {
         .unwrap_or("note.txt")
         .to_string();
     Ok(Note {
-        path: path.to_string_lossy().into_owned(),
+        path: path_to_api(path),
         filename,
         title: title_from_content(&content),
         content,
@@ -239,7 +259,7 @@ pub fn save_note(folder: &Path, current_path: &Path, content: &str) -> AppResult
     fs::write(&target_path, content)?;
 
     Ok(SaveResult {
-        path: target_path.to_string_lossy().into_owned(),
+        path: path_to_api(&target_path),
         filename: target_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -376,5 +396,31 @@ mod tests {
         let note = create_note(folder.path()).unwrap();
         let ok = assert_note_path(folder.path(), Path::new(&note.path)).unwrap();
         assert!(ok.exists());
+    }
+
+    #[test]
+    fn path_to_api_strips_windows_extended_prefix() {
+        assert_eq!(
+            strip_extended_prefix(r"\\?\C:\Notes\a.txt"),
+            r"C:\Notes\a.txt"
+        );
+        assert_eq!(
+            strip_extended_prefix(r"\\?\UNC\server\share\a.txt"),
+            r"\\server\share\a.txt"
+        );
+        assert_eq!(strip_extended_prefix(r"C:\Notes\a.txt"), r"C:\Notes\a.txt");
+    }
+
+    #[test]
+    fn read_note_path_matches_list_path_style() {
+        let dir = tempdir().unwrap();
+        let created = create_note(dir.path()).unwrap();
+        let listed = list_notes(dir.path()).unwrap();
+        assert_eq!(listed.len(), 1);
+        // After open (via assert_note_path + read), API path must compare equal to list.
+        let safe = assert_note_path(dir.path(), Path::new(&created.path)).unwrap();
+        let opened = read_note(&safe).unwrap();
+        assert_eq!(opened.path, listed[0].path);
+        assert!(!opened.path.contains(r"\\?\"));
     }
 }

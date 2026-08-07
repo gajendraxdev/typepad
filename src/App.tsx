@@ -6,6 +6,7 @@ import { SettingsModal } from "./components/SettingsModal";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { TitleBar } from "./components/TitleBar";
+import { Toast } from "./components/Toast";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useNotes } from "./hooks/useNotes";
@@ -27,6 +28,11 @@ import {
 } from "./lib/notes";
 import type { AppConfig } from "./types";
 
+type PinToast = {
+  message: string;
+  undoPins: string[];
+};
+
 export default function App() {
   const [bootstrapped, setBootstrapped] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -39,6 +45,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   /** Bumped to focus library search after sidebar mounts/expands. */
   const [searchFocusReq, setSearchFocusReq] = useState(0);
+  const [pinToast, setPinToast] = useState<PinToast | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<EditorHandle>(null);
   const widthSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -163,13 +170,16 @@ export default function App() {
 
   const { newNote, closeNote, selectTab, closeTab, flushAllDirty } = notesApi;
 
+  // Drop pins for deleted files — but NEVER prune before the library list
+  // has loaded, or a temporary empty list would wipe all pins to disk.
   useEffect(() => {
-    if (!config || !ready) return;
+    if (!config || !ready || !notesApi.listHydrated) return;
+    if (config.pinnedNotePaths.length === 0) return;
     const pruned = prunePinnedPaths(config.pinnedNotePaths, notesApi.notes);
     if (pruned.length !== config.pinnedNotePaths.length) {
       void persistConfig({ ...config, pinnedNotePaths: pruned });
     }
-  }, [config, notesApi.notes, ready, persistConfig]);
+  }, [config, notesApi.notes, notesApi.listHydrated, ready, persistConfig]);
 
   /** Optimistic pin list update, then persist via the write queue. */
   const applyPinnedPaths = useCallback(
@@ -185,10 +195,26 @@ export default function App() {
     (path: string) => {
       const prev = configRef.current;
       if (!prev) return;
+      const wasPinned = isPinned(prev.pinnedNotePaths, path);
+      const before = [...prev.pinnedNotePaths];
       applyPinnedPaths(togglePinnedPath(prev.pinnedNotePaths, path));
+      setPinToast({
+        message: wasPinned ? "Unpinned" : "Pinned to top",
+        undoPins: before,
+      });
     },
     [applyPinnedPaths],
   );
+
+  const undoPinChange = useCallback(() => {
+    if (!pinToast) return;
+    applyPinnedPaths(pinToast.undoPins);
+    setPinToast(null);
+  }, [pinToast, applyPinnedPaths]);
+
+  const dismissPinToast = useCallback(() => {
+    setPinToast(null);
+  }, []);
 
   const reorderPins = useCallback(
     (fromIndex: number, toIndex: number) => {
@@ -201,11 +227,14 @@ export default function App() {
     [applyPinnedPaths],
   );
 
+  const activePathRef = useRef(notesApi.activePath);
+  activePathRef.current = notesApi.activePath;
+
   const toggleActivePin = useCallback(() => {
-    const path = notesApi.activePath;
+    const path = activePathRef.current;
     if (!path) return;
     togglePin(path);
-  }, [notesApi.activePath, togglePin]);
+  }, [togglePin]);
 
   const handleDeleteNote = useCallback(
     async (path: string) => {
@@ -218,12 +247,6 @@ export default function App() {
       }
     },
     [notesApi, applyPinnedPaths],
-  );
-
-  const activeIsPinned = Boolean(
-    notesApi.activePath &&
-      config &&
-      isPinned(config.pinnedNotePaths, notesApi.activePath),
   );
 
   const toggleMarkdownPreview = useCallback(() => {
@@ -284,6 +307,7 @@ export default function App() {
       onFindNext: () => editorRef.current?.findNext(),
       onFindPrev: () => editorRef.current?.findPrev(),
       onToggleMarkdownPreview: toggleMarkdownPreview,
+      // Always provide the handler — it no-ops when no note is open.
       onTogglePinActive: toggleActivePin,
     }),
     [
@@ -310,9 +334,8 @@ export default function App() {
       onOpenSettings={() => setSettingsOpen(true)}
       onToggleSidebar={toggleSidebar}
       sidebarVisible={sidebarOpen}
-      activePinned={activeIsPinned}
-      onTogglePinActive={notesApi.activePath ? toggleActivePin : undefined}
       pinnedPaths={config?.pinnedNotePaths ?? []}
+      onTogglePinPath={togglePin}
     />
   );
 
@@ -367,9 +390,14 @@ export default function App() {
             const folderChanged = next.notesFolder !== config.notesFolder;
             if (folderChanged) {
               await flushAllDirty().catch(() => undefined);
-              const normalized = normalizeConfig(next);
+              // Pins are absolute paths in the old folder — drop them.
+              const normalized = normalizeConfig({
+                ...next,
+                pinnedNotePaths: [],
+              });
               configRef.current = normalized;
               setConfig(normalized);
+              setPinToast(null);
               await api.updateConfig(normalized).catch(() => undefined);
               await notesApi.resetAfterFolderChange();
             } else {
@@ -381,6 +409,16 @@ export default function App() {
 
       {titleBar}
       {ready ? <UpdateBanner /> : null}
+      <Toast
+        open={!!pinToast}
+        message={pinToast?.message ?? ""}
+        action={
+          pinToast
+            ? { label: "Undo", onClick: undoPinChange }
+            : null
+        }
+        onDismiss={dismissPinToast}
+      />
 
       <div className="app-body">
         <Sidebar

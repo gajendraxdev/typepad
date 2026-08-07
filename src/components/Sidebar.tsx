@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SIDEBAR_MAX, SIDEBAR_MIN } from "../lib/config";
-import { splitLibraryNotes } from "../lib/notes";
+import {
+  normalizeFsPath,
+  noteOptionId,
+  splitLibraryNotes,
+} from "../lib/notes";
 import type { NoteMeta } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { IconNote, IconPanelLeft, IconPlus } from "./icons";
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconNote,
+  IconPanelLeft,
+  IconPlus,
+} from "./icons";
 import { NoteContextMenu } from "./NoteContextMenu";
 import { NoteListItem } from "./NoteListItem";
 import { SearchBar } from "./SearchBar";
+
+const PINNED_COLLAPSED_KEY = "typepad.pinnedSectionCollapsed";
 
 interface Props {
   notes: NoteMeta[];
@@ -35,6 +47,10 @@ type ContextState = {
   y: number;
 } | null;
 
+function pathKey(p: string): string {
+  return normalizeFsPath(p);
+}
+
 export function Sidebar({
   notes,
   activePath,
@@ -55,12 +71,33 @@ export function Sidebar({
 }: Props) {
   const [pendingDelete, setPendingDelete] = useState<NoteMeta | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextState>(null);
-  /** UI only — actual reorder source index is kept in a ref (drop sees fresh value). */
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(PINNED_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  /** Keyboard highlight in the library (separate from open/active note). */
+  const [focusPath, setFocusPath] = useState<string | null>(null);
   const dragFromRef = useRef<number | null>(null);
   const resizing = useRef(false);
-  const openSet = useMemo(() => new Set(openPaths), [openPaths]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const openSet = useMemo(() => new Set(openPaths.map(pathKey)), [openPaths]);
+
+  const togglePinnedCollapsed = useCallback(() => {
+    setPinnedCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(PINNED_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -79,8 +116,15 @@ export function Sidebar({
   );
 
   const searching = query.trim().length > 0;
-  // Only reorder when the full pin list is visible (no search filter).
-  const canReorder = !searching && sections.pinned.length > 1;
+  const canReorder = !searching && sections.pinned.length > 1 && !pinnedCollapsed;
+
+  /** Flat list of navigable rows (respects collapsed pinned). */
+  const navNotes = useMemo(() => {
+    const pinned =
+      pinnedCollapsed && sections.pinned.length > 0 ? [] : sections.pinned;
+    return [...pinned, ...sections.others];
+  }, [sections.pinned, sections.others, pinnedCollapsed]);
+
   const totalVisible = sections.pinned.length + sections.others.length;
 
   const openContext = useCallback(
@@ -99,14 +143,15 @@ export function Sidebar({
     [],
   );
 
-  /** Map visible pin row indices → real pinnedPaths indices (handles gaps). */
   const reorderVisiblePins = useCallback(
     (fromVisible: number, toVisible: number) => {
       const fromPath = sections.pinned[fromVisible]?.path;
       const toPath = sections.pinned[toVisible]?.path;
       if (!fromPath || !toPath || fromPath === toPath) return;
-      const fromIndex = pinnedPaths.indexOf(fromPath);
-      const toIndex = pinnedPaths.indexOf(toPath);
+      const fromNorm = pathKey(fromPath);
+      const toNorm = pathKey(toPath);
+      const fromIndex = pinnedPaths.findIndex((p) => pathKey(p) === fromNorm);
+      const toIndex = pinnedPaths.findIndex((p) => pathKey(p) === toNorm);
       if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
       onReorderPins(fromIndex, toIndex);
     },
@@ -118,6 +163,82 @@ export function Sidebar({
     setDragFrom(null);
     setDragOver(null);
   }, []);
+
+  // Keep keyboard focus in sync with the open note when it changes.
+  useEffect(() => {
+    if (activePath) setFocusPath(activePath);
+  }, [activePath]);
+
+  // Drop focus if the note disappeared from the visible list.
+  useEffect(() => {
+    if (!focusPath) return;
+    const stillThere = navNotes.some((n) => pathKey(n.path) === pathKey(focusPath));
+    if (!stillThere) {
+      setFocusPath(navNotes[0]?.path ?? activePath ?? null);
+    }
+  }, [navNotes, focusPath, activePath]);
+
+  const moveFocus = useCallback(
+    (delta: number) => {
+      if (navNotes.length === 0) return;
+      const cur = focusPath
+        ? navNotes.findIndex((n) => pathKey(n.path) === pathKey(focusPath))
+        : -1;
+      let next = cur + delta;
+      if (cur < 0) next = delta > 0 ? 0 : navNotes.length - 1;
+      if (next < 0) next = 0;
+      if (next >= navNotes.length) next = navNotes.length - 1;
+      setFocusPath(navNotes[next].path);
+    },
+    [navNotes, focusPath],
+  );
+
+  const onListKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't hijack typing in the search box.
+      if (target.closest("input, textarea")) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        moveFocus(1);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        moveFocus(-1);
+        return;
+      }
+      if (e.key === "Home") {
+        e.preventDefault();
+        if (navNotes[0]) setFocusPath(navNotes[0].path);
+        return;
+      }
+      if (e.key === "End") {
+        e.preventDefault();
+        if (navNotes.length) setFocusPath(navNotes[navNotes.length - 1].path);
+        return;
+      }
+      if (e.key === "Enter" && focusPath) {
+        e.preventDefault();
+        onSelect(focusPath);
+        return;
+      }
+      // Ctrl+Shift+L handled globally; also allow plain "p" when list is focused.
+      if (
+        (e.key === "p" || e.key === "P") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        focusPath
+      ) {
+        e.preventDefault();
+        onTogglePin(focusPath);
+        return;
+      }
+    },
+    [moveFocus, focusPath, onSelect, onTogglePin, navNotes],
+  );
 
   const onResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -159,7 +280,6 @@ export function Sidebar({
     };
   }, []);
 
-  // Cancel drag UI if search starts mid-drag.
   useEffect(() => {
     if (searching) clearDrag();
   }, [searching, clearDrag]);
@@ -193,41 +313,49 @@ export function Sidebar({
     note: NoteMeta,
     pinned: boolean,
     dragIndex?: number,
-  ) => (
-    <NoteListItem
-      key={note.path}
-      note={note}
-      active={note.path === activePath}
-      isOpen={openSet.has(note.path)}
-      pinned={pinned}
-      canDrag={canReorder && pinned && dragIndex !== undefined}
-      dragIndex={dragIndex}
-      isDragging={dragFrom !== null && dragFrom === dragIndex}
-      isDropTarget={
-        dragFrom !== null &&
-        dragOver === dragIndex &&
-        dragFrom !== dragIndex
-      }
-      onSelect={() => onSelect(note.path)}
-      onTogglePin={() => onTogglePin(note.path)}
-      onDelete={() => setPendingDelete(note)}
-      onContextMenu={(x, y) => openContext(note, pinned, x, y)}
-      onDragStart={(index) => {
-        dragFromRef.current = index;
-        setDragFrom(index);
-        setDragOver(index);
-      }}
-      onDragOver={(index) => setDragOver(index)}
-      onDrop={(toIndex) => {
-        const from = dragFromRef.current;
-        if (from !== null && from !== toIndex) {
-          reorderVisiblePins(from, toIndex);
+  ) => {
+    const focused =
+      !!focusPath && pathKey(note.path) === pathKey(focusPath);
+    return (
+      <NoteListItem
+        key={note.path}
+        note={note}
+        active={!!activePath && pathKey(note.path) === pathKey(activePath)}
+        focused={focused}
+        isOpen={openSet.has(pathKey(note.path))}
+        pinned={pinned}
+        canDrag={canReorder && pinned && dragIndex !== undefined}
+        dragIndex={dragIndex}
+        isDragging={dragFrom !== null && dragFrom === dragIndex}
+        isDropTarget={
+          dragFrom !== null &&
+          dragOver === dragIndex &&
+          dragFrom !== dragIndex
         }
-        clearDrag();
-      }}
-      onDragEnd={clearDrag}
-    />
-  );
+        onSelect={() => {
+          setFocusPath(note.path);
+          onSelect(note.path);
+        }}
+        onTogglePin={() => onTogglePin(note.path)}
+        onDelete={() => setPendingDelete(note)}
+        onContextMenu={(x, y) => openContext(note, pinned, x, y)}
+        onDragStart={(index) => {
+          dragFromRef.current = index;
+          setDragFrom(index);
+          setDragOver(index);
+        }}
+        onDragOver={(index) => setDragOver(index)}
+        onDrop={(toIndex) => {
+          const from = dragFromRef.current;
+          if (from !== null && from !== toIndex) {
+            reorderVisiblePins(from, toIndex);
+          }
+          clearDrag();
+        }}
+        onDragEnd={clearDrag}
+      />
+    );
+  };
 
   const emptyMessage =
     notes.length === 0
@@ -239,7 +367,10 @@ export function Sidebar({
   return (
     <>
       <div className="sidebar-shell" style={{ width }}>
-        <aside className="flex h-full min-w-0 flex-1 flex-col bg-[var(--bg-sidebar)]">
+        <aside
+          className="flex h-full min-w-0 flex-1 flex-col bg-[var(--bg-sidebar)]"
+          onKeyDown={onListKeyDown}
+        >
           <div className="flex items-center justify-between gap-1 px-2 pt-1.5 pb-1">
             <div className="min-w-0">
               <div className="text-[10px] font-semibold tracking-[0.05em] text-[var(--text-faint)] uppercase">
@@ -247,7 +378,7 @@ export function Sidebar({
               </div>
               <div className="text-[10px] text-[var(--text-muted)] tabular-nums">
                 {notes.length} note{notes.length === 1 ? "" : "s"}
-                {sections.pinned.length > 0 || pinnedPaths.length > 0
+                {sections.pinned.length > 0
                   ? ` · ${sections.pinned.length} pinned`
                   : ""}
               </div>
@@ -276,7 +407,16 @@ export function Sidebar({
 
           <SearchBar ref={searchRef} value={query} onChange={onQueryChange} />
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
+          <div
+            ref={listRef}
+            className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5"
+            role="listbox"
+            aria-label="Notes"
+            tabIndex={0}
+            aria-activedescendant={
+              focusPath ? noteOptionId(focusPath) : undefined
+            }
+          >
             {totalVisible === 0 ? (
               <div className="anim-fade-in flex flex-col items-center gap-1.5 px-2 py-6 text-center">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[var(--text-faint)]">
@@ -285,31 +425,49 @@ export function Sidebar({
                 <p className="text-[11px] text-[var(--text-faint)]">
                   {emptyMessage}
                 </p>
-                {searching && pinnedPaths.length > 0 ? (
-                  <p className="text-[10px] text-[var(--text-faint)] opacity-80">
-                    Clear search to reorder pins
-                  </p>
-                ) : null}
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {sections.pinned.length > 0 ? (
-                  <section
-                    className="library-section is-pinned-section"
-                    aria-label="Pinned notes"
-                  >
-                    <div className="library-section-label">
-                      <span>📌 {searching ? "Pinned matches" : "Pinned"}</span>
-                      <span className="tabular-nums opacity-80">
-                        {sections.pinned.length}
-                        {canReorder ? " · drag ⋮⋮" : ""}
-                      </span>
-                    </div>
-                    <ul className="space-y-px">
-                      {sections.pinned.map((note, index) =>
-                        renderRow(note, true, index),
+                  <section className="library-section" aria-label="Pinned notes">
+                    <button
+                      type="button"
+                      className="library-section-toggle"
+                      onClick={togglePinnedCollapsed}
+                      aria-expanded={!pinnedCollapsed}
+                      title={
+                        pinnedCollapsed
+                          ? "Expand pinned notes"
+                          : "Collapse pinned notes"
+                      }
+                    >
+                      {pinnedCollapsed ? (
+                        <IconChevronRight
+                          size={12}
+                          className="library-section-chevron-icon"
+                        />
+                      ) : (
+                        <IconChevronDown
+                          size={12}
+                          className="library-section-chevron-icon"
+                        />
                       )}
-                    </ul>
+                      <span className="library-section-toggle-label">
+                        {searching ? "Pinned matches" : "Pinned"}
+                      </span>
+                      {pinnedCollapsed ? (
+                        <span className="library-section-count">
+                          {sections.pinned.length}
+                        </span>
+                      ) : null}
+                    </button>
+                    {!pinnedCollapsed ? (
+                      <ul className="space-y-px">
+                        {sections.pinned.map((note, index) =>
+                          renderRow(note, true, index),
+                        )}
+                      </ul>
+                    ) : null}
                   </section>
                 ) : searching && pinnedPaths.length > 0 ? (
                   <p className="px-1.5 py-1 text-[10px] text-[var(--text-faint)]">
@@ -319,18 +477,20 @@ export function Sidebar({
 
                 {sections.others.length > 0 ? (
                   <section className="library-section" aria-label="All notes">
-                    <div className="library-section-label">
-                      <span>
-                        {searching
-                          ? sections.pinned.length > 0
-                            ? "Other matches"
-                            : "Matches"
-                          : "Notes"}
-                      </span>
-                      <span className="tabular-nums opacity-70">
-                        {sections.others.length}
-                      </span>
-                    </div>
+                    {(sections.pinned.length > 0 || searching) && (
+                      <div className="library-section-label">
+                        <span>
+                          {searching
+                            ? sections.pinned.length > 0
+                              ? "Other matches"
+                              : "Matches"
+                            : "Notes"}
+                        </span>
+                        <span className="library-section-count">
+                          {sections.others.length}
+                        </span>
+                      </div>
+                    )}
                     <ul className="space-y-px">
                       {sections.others.map((note) => renderRow(note, false))}
                     </ul>

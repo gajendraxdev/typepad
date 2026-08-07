@@ -1,14 +1,15 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { relativeTime } from "../lib/format";
+import { noteOptionId } from "../lib/notes";
 import type { NoteMeta } from "../types";
 import { IconPin, IconPinOff, IconTrash } from "./icons";
 
 interface Props {
   note: NoteMeta;
   active: boolean;
+  focused?: boolean;
   isOpen: boolean;
   pinned: boolean;
-  /** Allow reorder drag from the handle. */
   canDrag?: boolean;
   dragIndex?: number;
   isDragging?: boolean;
@@ -21,11 +22,14 @@ interface Props {
   onDragOver?: (index: number) => void;
   onDrop?: (index: number) => void;
   onDragEnd?: () => void;
+  /** Register DOM node for scroll-into-view / focus management. */
+  itemRef?: (el: HTMLLIElement | null) => void;
 }
 
 export function NoteListItem({
   note,
   active,
+  focused = false,
   isOpen,
   pinned,
   canDrag = false,
@@ -40,8 +44,12 @@ export function NoteListItem({
   onDragOver,
   onDrop,
   onDragEnd,
+  itemRef,
 }: Props) {
   const ignoreClick = useRef(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLElement | null>(null);
+  const liRef = useRef<HTMLLIElement | null>(null);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
@@ -54,8 +62,29 @@ export function NoteListItem({
 
   const allowDrop = canDrag && dragIndex !== undefined;
 
+  const clearGhost = () => {
+    if (ghostRef.current) {
+      ghostRef.current.remove();
+      ghostRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (focused || active) {
+      liRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [focused, active]);
+
   return (
     <li
+      ref={(el) => {
+        liRef.current = el;
+        itemRef?.(el);
+      }}
+      id={noteOptionId(note.path)}
+      role="option"
+      aria-selected={active}
+      data-note-path={note.path}
       className={[
         canDrag ? "note-list-draggable" : "",
         isDragging ? "is-dragging" : "",
@@ -74,12 +103,16 @@ export function NoteListItem({
         if (!allowDrop) return;
         e.preventDefault();
         e.stopPropagation();
+        clearGhost();
         onDrop?.(dragIndex);
       }}
+      onContextMenu={handleContextMenu}
     >
+      {isDropTarget ? <div className="note-drop-line" aria-hidden /> : null}
+
       <div
-        role="button"
-        tabIndex={0}
+        ref={rowRef}
+        tabIndex={-1}
         onClick={() => {
           if (ignoreClick.current) {
             ignoreClick.current = false;
@@ -87,20 +120,7 @@ export function NoteListItem({
           }
           onSelect();
         }}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          const target = e.target as HTMLElement | null;
-          if (target?.closest("button, [draggable='true']")) return;
-          e.preventDefault();
-          onSelect();
-        }}
-        onContextMenu={handleContextMenu}
-        className={`note-item group ${active ? "is-active" : ""} ${pinned ? "is-pinned" : ""}`}
-        title={
-          pinned
-            ? `${note.title} · pinned · right-click for more`
-            : `${note.title} · right-click to pin`
-        }
+        className={`note-item group ${active ? "is-active" : ""} ${focused && !active ? "is-focused" : ""} ${pinned ? "is-pinned" : ""}`}
       >
         {canDrag && dragIndex !== undefined ? (
           <span
@@ -111,25 +131,31 @@ export function NoteListItem({
               e.stopPropagation();
               e.dataTransfer.effectAllowed = "move";
               e.dataTransfer.setData("text/plain", String(dragIndex));
-              // Keep a visible handle; empty drag image feels broken in WebView2.
+
+              const source = rowRef.current;
+              if (source) {
+                const ghost = document.createElement("div");
+                ghost.className = "note-drag-ghost";
+                ghost.textContent = note.title;
+                document.body.appendChild(ghost);
+                ghostRef.current = ghost;
+                e.dataTransfer.setDragImage(ghost, 12, 14);
+              }
+
               onDragStart?.(dragIndex);
             }}
             onDragEnd={(e) => {
               e.stopPropagation();
+              clearGhost();
               onDragEnd?.();
             }}
-            onClick={(e) => {
-              // Don't select the note when interacting with the handle.
-              e.stopPropagation();
-            }}
+            onClick={(e) => e.stopPropagation()}
           >
             ⋮⋮
           </span>
-        ) : pinned ? (
-          <span className="note-pin-marker" aria-hidden title="Pinned">
-            <IconPin size={10} />
-          </span>
-        ) : null}
+        ) : (
+          <span className="note-pin-spacer" aria-hidden />
+        )}
 
         <div className="note-item-body">
           <p className="note-item-title">{note.title}</p>
@@ -145,8 +171,8 @@ export function NoteListItem({
             type="button"
             title={
               pinned
-                ? "Unpin (Ctrl+Shift+. when open)"
-                : "Pin to top (Ctrl+Shift+. when open)"
+                ? "Unpin (Ctrl+Shift+L)"
+                : "Pin to top (Ctrl+Shift+L)"
             }
             onClick={(e) => {
               e.stopPropagation();

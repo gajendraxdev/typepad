@@ -41,6 +41,8 @@ export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** True after the first listNotes() finishes (success or error). */
+  const [listHydrated, setListHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const tabsRef = useRef(tabs);
@@ -71,11 +73,20 @@ export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
       setError(null);
     } catch (e) {
       setError(String(e));
+    } finally {
+      // Mark hydrated even on error so pin prune does not hang forever.
+      setListHydrated(true);
     }
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready) {
+      // Folder not ready / reset — avoid pruning against a stale empty list.
+      setListHydrated(false);
+      setNotes([]);
+      return;
+    }
+    setListHydrated(false);
     void refreshList();
   }, [ready, refreshList]);
 
@@ -396,6 +407,8 @@ export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
     draft: active?.draft ?? "",
     saveStatus: active?.saveStatus ?? ("idle" as SaveStatus),
     loading,
+    /** False until the first notes list fetch completes after `ready`. */
+    listHydrated,
     error,
     refreshList,
     openNote,

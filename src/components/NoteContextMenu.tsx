@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconPin, IconPinOff, IconTrash } from "./icons";
 
 interface Props {
@@ -19,7 +20,7 @@ function isMac(): boolean {
   );
 }
 
-/** Lightweight right-click menu for a library note row. */
+/** Right-click menu — portaled, clamped to viewport. */
 export function NoteContextMenu({
   open,
   x,
@@ -31,33 +32,59 @@ export function NoteContextMenu({
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const pinShortcut = isMac() ? "⌘⇧." : "Ctrl+Shift+.";
+  const [pos, setPos] = useState({ left: x, top: y });
+  const pinShortcut = isMac() ? "⌘⇧L" : "Ctrl+Shift+L";
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current) {
+      setPos({ left: x, top: y });
+      return;
+    }
+    const rect = ref.current.getBoundingClientRect();
+    const pad = 8;
+    // Clamp max to ≥ pad so a huge menu never gets a negative origin.
+    const maxLeft = Math.max(pad, window.innerWidth - rect.width - pad);
+    const maxTop = Math.max(pad, window.innerHeight - rect.height - pad);
+    const left = Math.min(Math.max(pad, x), maxLeft);
+    const top = Math.min(Math.max(pad, y), maxTop);
+    setPos({ left, top });
+  }, [open, x, y]);
 
   useEffect(() => {
     if (!open) return;
-    const onPointer = (e: MouseEvent) => {
-      if (ref.current?.contains(e.target as Node)) return;
-      onClose();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("mousedown", onPointer);
-    window.addEventListener("keydown", onKey);
+
+    let removeListeners: (() => void) | undefined;
+    const t = window.setTimeout(() => {
+      const onPointer = (e: PointerEvent) => {
+        if (ref.current?.contains(e.target as Node)) return;
+        onClose();
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") onClose();
+      };
+      window.addEventListener("pointerdown", onPointer, true);
+      window.addEventListener("keydown", onKey, true);
+      removeListeners = () => {
+        window.removeEventListener("pointerdown", onPointer, true);
+        window.removeEventListener("keydown", onKey, true);
+      };
+    }, 16);
+
     return () => {
-      window.removeEventListener("mousedown", onPointer);
-      window.removeEventListener("keydown", onKey);
+      window.clearTimeout(t);
+      removeListeners?.();
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       className="note-context-menu anim-scale-in"
-      style={{ top: y, left: x }}
+      style={{ top: pos.top, left: pos.left }}
       role="menu"
+      onContextMenu={(e) => e.preventDefault()}
     >
       <p className="note-context-hint truncate" title={title}>
         {title}
@@ -66,13 +93,16 @@ export function NoteContextMenu({
         type="button"
         role="menuitem"
         className="note-context-item"
-        onClick={() => {
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           onPin();
           onClose();
         }}
       >
         {pinned ? <IconPin size={13} /> : <IconPinOff size={13} />}
-        <span className="flex-1 text-left">
+        <span className="note-context-item-label">
           {pinned ? "Unpin note" : "Pin to top"}
         </span>
         <kbd className="note-context-kbd">{pinShortcut}</kbd>
@@ -82,14 +112,18 @@ export function NoteContextMenu({
         type="button"
         role="menuitem"
         className="note-context-item note-context-item-danger"
-        onClick={() => {
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           onDelete();
           onClose();
         }}
       >
         <IconTrash size={13} />
-        Move to trash
+        <span className="note-context-item-label">Move to trash</span>
       </button>
-    </div>
+    </div>,
+    document.body,
   );
 }

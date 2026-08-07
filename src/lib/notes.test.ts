@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isPinned,
   movePinnedPath,
+  normalizeFsPath,
   prunePinnedPaths,
   remapPinnedPath,
   removePinnedPath,
@@ -119,5 +120,20 @@ describe("isPinned", () => {
   it("checks membership", () => {
     expect(isPinned(["/a.txt"], "/a.txt")).toBe(true);
     expect(isPinned(["/a.txt"], "/b.txt")).toBe(false);
+  });
+
+  it("matches Windows extended and normal paths", () => {
+    const normal = "C:\\Users\\me\\Notes\\a.txt";
+    const extended = "\\\\?\\C:\\Users\\me\\Notes\\a.txt";
+    expect(isPinned([normal], extended)).toBe(true);
+    expect(isPinned([extended], normal)).toBe(true);
+    expect(togglePinnedPath([normal], extended)).toEqual([]);
+    expect(togglePinnedPath([], extended)).toEqual([normal]);
+  });
+});
+
+describe("normalizeFsPath", () => {
+  it("strips \\\\?\\ prefix", () => {
+    expect(normalizeFsPath("\\\\?\\C:\\Notes\\a.txt")).toBe("C:\\Notes\\a.txt");
   });
 });

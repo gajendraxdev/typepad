@@ -25,6 +25,22 @@ export function IconPlus({ className, size = 16 }: IconProps) {
   );
 }
 
+export function IconChevronRight({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function IconChevronDown({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
 export function IconSearch({ className, size = 16 }: IconProps) {
   return (
     <svg {...base(size)} className={className}>

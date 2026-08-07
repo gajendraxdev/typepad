@@ -68,11 +68,22 @@ describe("normalizeConfig", () => {
   it("filters malformed pinnedNotePaths and keeps valid paths", () => {
     const raw = {
       ...baseConfig,
-      pinnedNotePaths: ["/ok.txt", "", 42, null, "/also.txt"] as unknown as string[],
+      pinnedNotePaths: [
+        "/ok.txt",
+        "",
+        "   ",
+        42,
+        null,
+        "/also.txt",
+        "/ok.txt",
+        "\\\\?\\C:\\Notes\\a.txt",
+        "C:\\Notes\\a.txt",
+      ] as unknown as string[],
     };
     expect(normalizeConfig(raw).pinnedNotePaths).toEqual([
       "/ok.txt",
       "/also.txt",
+      "C:\\Notes\\a.txt",
     ]);
   });
 

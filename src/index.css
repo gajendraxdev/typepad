@@ -401,35 +401,52 @@ input[type="search"] {
   background: rgba(0, 0, 0, 0.55);
 }
 
-/* Library sections (Pinned / Notes) */
+/* Library sections — plain headers (Notion-style, no tint blocks) */
 .library-section {
-  border-radius: 8px;
-  padding: 0.15rem 0 0.25rem;
+  padding: 0.1rem 0 0.35rem;
 }
 
-.library-section.is-pinned-section {
-  margin: 0 0 0.15rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
-  padding: 0.2rem 0.2rem 0.35rem;
-}
-
-.library-section-label {
+.library-section-label,
+.library-section-toggle {
   display: flex;
+  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.4rem 0.45rem 0.3rem;
+  gap: 0.35rem;
+  padding: 0.35rem 0.4rem 0.25rem;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-faint);
   user-select: none;
 }
 
-.library-section.is-pinned-section .library-section-label {
-  color: var(--accent);
+.library-section-toggle {
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 100ms var(--ease-out), color 100ms var(--ease-out);
+}
+
+.library-section-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+.library-section-chevron-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.library-section-toggle-label {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.library-section-count {
+  flex-shrink: 0;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Note list item */
@@ -460,6 +477,11 @@ input[type="search"] {
   box-shadow: var(--shadow-sm), 0 0 0 1px var(--border);
 }
 
+.note-item.is-focused:not(.is-active) {
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong, var(--border));
+}
+
 .note-item.is-active::before {
   content: "";
   position: absolute;
@@ -477,26 +499,49 @@ input[type="search"] {
 }
 
 .note-list-draggable.is-dragging .note-item {
-  opacity: 0.4;
-  transform: scale(0.98);
+  opacity: 0.35;
 }
 
 .note-list-draggable.is-drop-target .note-item {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  background: transparent;
+  box-shadow: none;
 }
 
-.note-pin-marker {
-  margin-top: 0.2rem;
+/* Clean insertion line instead of a heavy full-row flash */
+.note-drop-line {
+  height: 2px;
+  margin: 1px 0.35rem;
+  border-radius: 99px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  pointer-events: none;
+}
+
+/* Floating label used as drag image (removed after drag) */
+.note-drag-ghost {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  z-index: 9999;
+  max-width: 200px;
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, var(--bg-sidebar));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Spacer when not showing drag handle (keeps title alignment clean). */
+.note-pin-spacer {
+  width: 0.15rem;
   flex-shrink: 0;
-  display: inline-flex;
-  width: 0.9rem;
-  height: 0.9rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 80%, transparent);
 }
 
 .note-item-body {
@@ -617,30 +662,35 @@ input[type="search"] {
   color: var(--danger);
 }
 
-/* Right-click context menu */
+/* Right-click context menu (portaled to body) */
 .note-context-menu {
   position: fixed;
-  z-index: 80;
-  min-width: 10.5rem;
-  max-width: 16rem;
+  z-index: 200;
+  min-width: 11.5rem;
+  max-width: 18rem;
   padding: 0.3rem;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-elevated, var(--bg-sidebar));
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.14));
+  box-shadow: var(--shadow-md, 0 10px 28px rgba(0, 0, 0, 0.18));
 }
 
 .note-context-item {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   border-radius: 5px;
-  padding: 0.4rem 0.5rem;
+  padding: 0.45rem 0.5rem;
   font-size: 12px;
   color: var(--text);
   text-align: left;
   transition: background 80ms var(--ease-out);
+}
+
+.note-context-item-label {
+  flex: 1;
+  text-align: left;
 }
 
 .note-context-item:hover {
@@ -679,23 +729,15 @@ input[type="search"] {
   line-height: 1.3;
 }
 
-.titlebar-action.is-pinned {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.titlebar-tab.is-pinned {
-  color: var(--text-muted);
-}
-
 .titlebar-tab.is-pinned .titlebar-tab-label {
   max-width: 7.5rem;
 }
 
+/* Subtle tab badge only — not a control */
 .titlebar-tab-pin {
   flex-shrink: 0;
-  color: var(--accent);
-  opacity: 1;
+  color: var(--text-faint);
+  opacity: 0.85;
 }
 
 /* Theme segment control */
@@ -773,6 +815,76 @@ input[type="search"] {
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+/* Undo toast */
+.app-toast {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  z-index: 120;
+  display: flex;
+  max-width: min(420px, calc(100vw - 2rem));
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem 0.5rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated, var(--bg-sidebar));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  transform: translateX(-50%);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.app-toast-msg {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-toast-action {
+  flex-shrink: 0;
+  border-radius: 5px;
+  padding: 0.2rem 0.45rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  transition: background 100ms var(--ease-out);
+}
+
+.app-toast-action:hover {
+  background: var(--accent-soft);
+}
+
+.app-toast-dismiss {
+  flex-shrink: 0;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 5px;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  transition: background 100ms var(--ease-out), color 100ms var(--ease-out);
+}
+
+.app-toast-dismiss:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+@keyframes anim-fade-up {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.anim-fade-up {
+  animation: anim-fade-up 140ms var(--ease-out, ease-out) both;
 }
 
 /* In-app update notice (auto-updater) */
@@ -1104,6 +1216,18 @@ input[type="search"] {
   border-bottom: 1px solid var(--border);
   background: var(--bg-sidebar);
   user-select: none;
+}
+
+/* Interactive chrome must not be a window-drag region or right-click dies. */
+.titlebar-tabs,
+.titlebar-tab,
+.titlebar-new,
+.titlebar-actions,
+.titlebar-action,
+.titlebar-controls,
+.titlebar-winbtn {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .titlebar-main {

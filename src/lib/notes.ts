@@ -5,18 +5,53 @@ export interface LibrarySections {
   others: NoteMeta[];
 }
 
+/**
+ * Normalize filesystem paths for stable pin comparisons.
+ * Windows canonicalize uses `\\?\C:\...`; list_dir usually returns `C:\...`.
+ */
+export function normalizeFsPath(path: string): string {
+  let p = path.trim();
+  // `\\?\C:\...`
+  if (p.startsWith("\\\\?\\")) {
+    p = p.slice(4);
+    // `\\?\UNC\server\share\...` → `\\server\share\...`
+    if (p.toUpperCase().startsWith("UNC\\")) {
+      p = `\\\\${p.slice(4)}`;
+    }
+  }
+  // Windows drive paths only: normalize slashes + drive letter case.
+  // Leave POSIX paths (`/home/...`) untouched.
+  if (/^[a-zA-Z]:[\\/]/.test(p) || p.startsWith("\\\\")) {
+    p = p.replace(/\//g, "\\");
+    if (/^[a-zA-Z]:\\/.test(p)) {
+      p = p[0].toUpperCase() + p.slice(1);
+    }
+  }
+  return p;
+}
+
+function samePath(a: string, b: string): boolean {
+  return normalizeFsPath(a) === normalizeFsPath(b);
+}
+
+/** Stable DOM id for a note path (listbox option / aria-activedescendant). */
+export function noteOptionId(path: string): string {
+  // Keep IDs CSS/HTML-safe while remaining unique per path.
+  return `note-opt-${encodeURIComponent(normalizeFsPath(path)).replace(/%/g, "_")}`;
+}
+
 /** Split notes into pinned (config order) and unpinned (newest first). */
 export function splitLibraryNotes(
   notes: NoteMeta[],
   pinnedPaths: string[],
 ): LibrarySections {
-  const byPath = new Map(notes.map((n) => [n.path, n]));
+  const byPath = new Map(notes.map((n) => [normalizeFsPath(n.path), n]));
   const pinned = pinnedPaths
-    .map((p) => byPath.get(p))
+    .map((p) => byPath.get(normalizeFsPath(p)))
     .filter((n): n is NoteMeta => n !== undefined);
-  const pinnedSet = new Set(pinnedPaths);
+  const pinnedSet = new Set(pinnedPaths.map(normalizeFsPath));
   const others = notes
-    .filter((n) => !pinnedSet.has(n.path))
+    .filter((n) => !pinnedSet.has(normalizeFsPath(n.path)))
     .sort((a, b) => b.modifiedMs - a.modifiedMs);
   return { pinned, others };
 }
@@ -34,11 +69,13 @@ export function togglePinnedPath(
   pinnedPaths: string[],
   path: string,
 ): string[] {
-  const idx = pinnedPaths.indexOf(path);
+  const norm = normalizeFsPath(path);
+  const idx = pinnedPaths.findIndex((p) => samePath(p, norm));
   if (idx >= 0) {
-    return pinnedPaths.filter((p) => p !== path);
+    return pinnedPaths.filter((_, i) => i !== idx);
   }
-  return [path, ...pinnedPaths];
+  // Store normalized form so future comparisons stay stable.
+  return [norm, ...pinnedPaths.map(normalizeFsPath)];
 }
 
 export function movePinnedPath(
@@ -66,10 +103,10 @@ export function remapPinnedPath(
   oldPath: string,
   newPath: string,
 ): string[] {
-  const idx = pinnedPaths.indexOf(oldPath);
+  const idx = pinnedPaths.findIndex((p) => samePath(p, oldPath));
   if (idx < 0) return pinnedPaths;
   const next = [...pinnedPaths];
-  next[idx] = newPath;
+  next[idx] = normalizeFsPath(newPath);
   return next;
 }
 
@@ -77,7 +114,7 @@ export function removePinnedPath(
   pinnedPaths: string[],
   path: string,
 ): string[] {
-  return pinnedPaths.filter((p) => p !== path);
+  return pinnedPaths.filter((p) => !samePath(p, path));
 }
 
 /** Drop pins for notes that no longer exist on disk. */
@@ -85,10 +122,11 @@ export function prunePinnedPaths(
   pinnedPaths: string[],
   notes: NoteMeta[],
 ): string[] {
-  const existing = new Set(notes.map((n) => n.path));
-  return pinnedPaths.filter((p) => existing.has(p));
+  const existing = new Set(notes.map((n) => normalizeFsPath(n.path)));
+  return pinnedPaths.filter((p) => existing.has(normalizeFsPath(p)));
 }
 
 export function isPinned(pinnedPaths: string[], path: string): boolean {
-  return pinnedPaths.includes(path);
+  const norm = normalizeFsPath(path);
+  return pinnedPaths.some((p) => samePath(p, norm));
 }

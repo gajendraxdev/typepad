@@ -12,13 +12,20 @@ export interface ShortcutHandlers {
   onFindNext?: () => void;
   onFindPrev?: () => void;
   onToggleMarkdownPreview?: () => void;
-  /** Ctrl+Shift+. — pin / unpin the active note */
+  /** Ctrl+Shift+L — pin / unpin the active note */
   onTogglePinActive?: () => void;
+}
+
+function isMod(e: KeyboardEvent): boolean {
+  return e.ctrlKey || e.metaKey;
 }
 
 /**
  * App shortcuts work even when the note textarea has focus.
  * Capture phase so we beat WebView2 Find (Ctrl+F) and similar host bindings.
+ *
+ * Prefer `e.code` (physical key) over `e.key` — Shift/layout change `e.key`
+ * and break letter shortcuts in WebView2.
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   const handlersRef = useRef(handlers);
@@ -27,12 +34,13 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) return;
-      const mod = e.ctrlKey || e.metaKey;
       const h = handlersRef.current;
-      const key = e.key.toLowerCase();
+      const code = e.code;
+      const mod = isMod(e);
+      const repeat = e.repeat;
 
-      // F3 / Shift+F3 — find next/prev (no Ctrl required)
-      if (key === "f3") {
+      // F3 / Shift+F3 — find next/prev (repeats allowed for holding to walk matches)
+      if (code === "F3") {
         e.preventDefault();
         e.stopPropagation();
         if (e.shiftKey) h.onFindPrev?.();
@@ -42,77 +50,85 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
 
       if (!mod || e.altKey) return;
 
-      if (key === "n" && !e.shiftKey && h.onNew) {
-        e.preventDefault();
-        e.stopPropagation();
-        h.onNew();
-        return;
-      }
-
-      // Ctrl+Shift+P → markdown preview toggle
-      if (key === "p" && e.shiftKey && h.onToggleMarkdownPreview) {
-        e.preventDefault();
-        e.stopPropagation();
-        h.onToggleMarkdownPreview();
-        return;
-      }
-
-      // Ctrl+Shift+. → pin / unpin active note
-      // Shift+. yields ">" on many layouts; prefer e.code for reliability.
-      if (
-        e.shiftKey &&
-        h.onTogglePinActive &&
-        (key === "." || key === ">" || e.code === "Period")
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        h.onTogglePinActive();
-        return;
-      }
-
-      // Ctrl+Shift+F → library note list search
-      if (key === "f" && e.shiftKey && h.onLibrarySearch) {
-        e.preventDefault();
-        e.stopPropagation();
-        h.onLibrarySearch();
-        return;
-      }
-
-      // Ctrl+F → find inside current note
-      if (key === "f" && !e.shiftKey && h.onFindInNote) {
-        e.preventDefault();
-        e.stopPropagation();
-        h.onFindInNote();
-        return;
-      }
-
-      // Ctrl+G → next match (common find-next)
-      if (key === "g" && !e.shiftKey && h.onFindNext) {
+      // Ctrl+G / Ctrl+Shift+G — find next/prev (repeats OK)
+      if (code === "KeyG" && !e.shiftKey && h.onFindNext) {
         e.preventDefault();
         e.stopPropagation();
         h.onFindNext();
         return;
       }
-      if (key === "g" && e.shiftKey && h.onFindPrev) {
+      if (code === "KeyG" && e.shiftKey && h.onFindPrev) {
         e.preventDefault();
         e.stopPropagation();
         h.onFindPrev();
         return;
       }
 
-      if (key === "," && h.onSettings) {
+      // Remaining shortcuts are toggles / one-shots — ignore key-repeat.
+      if (repeat) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // Ctrl+N — new note
+      if (code === "KeyN" && !e.shiftKey && h.onNew) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onNew();
+        return;
+      }
+
+      // Ctrl+Shift+P — markdown preview
+      if (code === "KeyP" && e.shiftKey && h.onToggleMarkdownPreview) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onToggleMarkdownPreview();
+        return;
+      }
+
+      // Ctrl+Shift+L — pin / unpin active note
+      if (code === "KeyL" && e.shiftKey && h.onTogglePinActive) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onTogglePinActive();
+        return;
+      }
+
+      // Ctrl+Shift+F — library search
+      if (code === "KeyF" && e.shiftKey && h.onLibrarySearch) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onLibrarySearch();
+        return;
+      }
+
+      // Ctrl+F — find in note
+      if (code === "KeyF" && !e.shiftKey && h.onFindInNote) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onFindInNote();
+        return;
+      }
+
+      // Ctrl+, — settings
+      if (code === "Comma" && h.onSettings) {
         e.preventDefault();
         e.stopPropagation();
         h.onSettings();
         return;
       }
-      if (key === "w" && h.onCloseNote) {
+
+      // Ctrl+W — close note
+      if (code === "KeyW" && h.onCloseNote) {
         e.preventDefault();
         e.stopPropagation();
         h.onCloseNote();
         return;
       }
-      if (key === "b" && h.onToggleSidebar) {
+
+      // Ctrl+B — toggle sidebar
+      if (code === "KeyB" && h.onToggleSidebar) {
         e.preventDefault();
         e.stopPropagation();
         h.onToggleSidebar();
@@ -120,6 +136,8 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
     };
 
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
   }, []);
 }

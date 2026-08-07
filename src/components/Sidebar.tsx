@@ -55,8 +55,10 @@ export function Sidebar({
 }: Props) {
   const [pendingDelete, setPendingDelete] = useState<NoteMeta | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextState>(null);
+  /** UI only — actual reorder source index is kept in a ref (drop sees fresh value). */
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
+  const dragFromRef = useRef<number | null>(null);
   const resizing = useRef(false);
   const openSet = useMemo(() => new Set(openPaths), [openPaths]);
 
@@ -112,6 +114,7 @@ export function Sidebar({
   );
 
   const clearDrag = useCallback(() => {
+    dragFromRef.current = null;
     setDragFrom(null);
     setDragOver(null);
   }, []);
@@ -197,7 +200,7 @@ export function Sidebar({
       active={note.path === activePath}
       isOpen={openSet.has(note.path)}
       pinned={pinned}
-      draggable={canReorder && pinned && dragIndex !== undefined}
+      canDrag={canReorder && pinned && dragIndex !== undefined}
       dragIndex={dragIndex}
       isDragging={dragFrom !== null && dragFrom === dragIndex}
       isDropTarget={
@@ -210,13 +213,15 @@ export function Sidebar({
       onDelete={() => setPendingDelete(note)}
       onContextMenu={(x, y) => openContext(note, pinned, x, y)}
       onDragStart={(index) => {
+        dragFromRef.current = index;
         setDragFrom(index);
         setDragOver(index);
       }}
       onDragOver={(index) => setDragOver(index)}
       onDrop={(toIndex) => {
-        if (dragFrom !== null && dragFrom !== toIndex) {
-          reorderVisiblePins(dragFrom, toIndex);
+        const from = dragFromRef.current;
+        if (from !== null && from !== toIndex) {
+          reorderVisiblePins(from, toIndex);
         }
         clearDrag();
       }}

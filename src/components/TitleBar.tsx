@@ -29,8 +29,6 @@ interface Props {
   onTogglePinActive?: () => void;
   /** Paths currently pinned (for tab badges). */
   pinnedPaths?: string[];
-  /** Pin/unpin a specific path (tab context). */
-  onTogglePinPath?: (path: string) => void;
 }
 
 /**
@@ -51,7 +49,6 @@ export function TitleBar({
   activePinned = false,
   onTogglePinActive,
   pinnedPaths = [],
-  onTogglePinPath,
 }: Props) {
   const [maximized, setMaximized] = useState(false);
   const pinnedSet = new Set(pinnedPaths);
@@ -129,11 +126,6 @@ export function TitleBar({
                       e.preventDefault();
                       onClose(tab.path);
                     }
-                  }}
-                  onContextMenu={(e) => {
-                    if (!onTogglePinPath) return;
-                    e.preventDefault();
-                    onTogglePinPath(tab.path);
                   }}
                 >
                   {pinned ? (

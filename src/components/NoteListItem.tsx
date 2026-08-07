@@ -8,11 +8,10 @@ interface Props {
   active: boolean;
   isOpen: boolean;
   pinned: boolean;
-  draggable?: boolean;
+  /** Allow reorder drag from the handle. */
+  canDrag?: boolean;
   dragIndex?: number;
-  /** Visual: this row is being dragged. */
   isDragging?: boolean;
-  /** Visual: drop target highlight. */
   isDropTarget?: boolean;
   onSelect: () => void;
   onTogglePin: () => void;
@@ -29,7 +28,7 @@ export function NoteListItem({
   active,
   isOpen,
   pinned,
-  draggable = false,
+  canDrag = false,
   dragIndex,
   isDragging = false,
   isDropTarget = false,
@@ -53,35 +52,30 @@ export function NoteListItem({
     [onContextMenu],
   );
 
+  const allowDrop = canDrag && dragIndex !== undefined;
+
   return (
     <li
       className={[
-        draggable ? "note-list-draggable" : "",
+        canDrag ? "note-list-draggable" : "",
         isDragging ? "is-dragging" : "",
         isDropTarget ? "is-drop-target" : "",
       ]
         .filter(Boolean)
         .join(" ")}
-      draggable={draggable}
-      onDragStart={(e) => {
-        if (!draggable || dragIndex === undefined) return;
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", String(dragIndex));
-        // Transparent drag image keeps the list tidy.
-        onDragStart?.(dragIndex);
-      }}
       onDragOver={(e) => {
-        if (!draggable || dragIndex === undefined) return;
+        if (!allowDrop) return;
         e.preventDefault();
+        e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
         onDragOver?.(dragIndex);
       }}
       onDrop={(e) => {
-        if (!draggable || dragIndex === undefined) return;
+        if (!allowDrop) return;
         e.preventDefault();
+        e.stopPropagation();
         onDrop?.(dragIndex);
       }}
-      onDragEnd={() => onDragEnd?.()}
     >
       <div
         role="button"
@@ -96,7 +90,7 @@ export function NoteListItem({
         onKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
           const target = e.target as HTMLElement | null;
-          if (target?.closest("button")) return;
+          if (target?.closest("button, [draggable='true']")) return;
           e.preventDefault();
           onSelect();
         }}
@@ -108,11 +102,26 @@ export function NoteListItem({
             : `${note.title} · right-click to pin`
         }
       >
-        {draggable ? (
+        {canDrag && dragIndex !== undefined ? (
           <span
             className="note-drag-handle"
             title="Drag to reorder"
-            aria-hidden
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", String(dragIndex));
+              // Keep a visible handle; empty drag image feels broken in WebView2.
+              onDragStart?.(dragIndex);
+            }}
+            onDragEnd={(e) => {
+              e.stopPropagation();
+              onDragEnd?.();
+            }}
+            onClick={(e) => {
+              // Don't select the note when interacting with the handle.
+              e.stopPropagation();
+            }}
           >
             ⋮⋮
           </span>

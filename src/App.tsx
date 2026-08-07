@@ -313,7 +313,6 @@ export default function App() {
       activePinned={activeIsPinned}
       onTogglePinActive={notesApi.activePath ? toggleActivePin : undefined}
       pinnedPaths={config?.pinnedNotePaths ?? []}
-      onTogglePinPath={togglePin}
     />
   );
 

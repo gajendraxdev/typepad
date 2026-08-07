@@ -11,6 +11,9 @@ export interface ShortcutHandlers {
   onToggleSidebar?: () => void;
   onFindNext?: () => void;
   onFindPrev?: () => void;
+  onToggleMarkdownPreview?: () => void;
+  /** Ctrl+Shift+. — pin / unpin the active note */
+  onTogglePinActive?: () => void;
 }
 
 /**
@@ -43,6 +46,27 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers) {
         e.preventDefault();
         e.stopPropagation();
         h.onNew();
+        return;
+      }
+
+      // Ctrl+Shift+P → markdown preview toggle
+      if (key === "p" && e.shiftKey && h.onToggleMarkdownPreview) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onToggleMarkdownPreview();
+        return;
+      }
+
+      // Ctrl+Shift+. → pin / unpin active note
+      // Shift+. yields ">" on many layouts; prefer e.code for reliability.
+      if (
+        e.shiftKey &&
+        h.onTogglePinActive &&
+        (key === "." || key === ">" || e.code === "Period")
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        h.onTogglePinActive();
         return;
       }
 

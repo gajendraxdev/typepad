@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as api from "../lib/api";
-import { normalizeConfig, normalizeTabLayout } from "../lib/config";
-import type { AppConfig, TabLayout, ThemeMode } from "../types";
+import { normalizeConfig } from "../lib/config";
+import type { AppConfig, ThemeMode } from "../types";
 import {
   IconCheck,
   IconClose,
@@ -9,7 +9,6 @@ import {
   IconKeyboard,
   IconMonitor,
   IconMoon,
-  IconPanelLeft,
   IconSun,
   IconType,
 } from "./icons";
@@ -20,7 +19,7 @@ interface Props {
   onConfigChange: (config: AppConfig) => Promise<void>;
 }
 
-type SectionId = "appearance" | "layout" | "storage" | "shortcuts";
+type SectionId = "appearance" | "storage" | "shortcuts";
 
 const SECTIONS: {
   id: SectionId;
@@ -33,12 +32,6 @@ const SECTIONS: {
     label: "Appearance",
     description: "Theme and editor font",
     icon: IconType,
-  },
-  {
-    id: "layout",
-    label: "Layout",
-    description: "Sidebar and tabs",
-    icon: IconPanelLeft,
   },
   {
     id: "storage",
@@ -73,11 +66,17 @@ const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: "Ctrl+N", action: "New note" },
   { keys: "Ctrl+F", action: "Find in current note" },
   { keys: "Ctrl+Shift+F", action: "Search library" },
+  { keys: "Ctrl+Shift+P", action: "Toggle markdown preview" },
+  { keys: "Ctrl+Shift+.", action: "Pin / unpin active note" },
   { keys: "Ctrl+W", action: "Close current tab" },
   { keys: "Ctrl+B", action: "Toggle library sidebar" },
   { keys: "Ctrl+,", action: "Open settings" },
-  { keys: "Enter", action: "Find next match" },
-  { keys: "Shift+Enter", action: "Find previous match" },
+  { keys: "Ctrl+G", action: "Find next match" },
+  { keys: "Ctrl+Shift+G", action: "Find previous match" },
+  { keys: "F3", action: "Find next match" },
+  { keys: "Shift+F3", action: "Find previous match" },
+  { keys: "Enter", action: "Find next (in find bar)" },
+  { keys: "Shift+Enter", action: "Find previous (in find bar)" },
   { keys: "Esc", action: "Close find / dialogs" },
 ];
 
@@ -101,9 +100,6 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
   const [theme, setTheme] = useState<ThemeMode>(config.theme);
   const [fontFamily, setFontFamily] = useState(config.fontFamily);
   const [fontSize, setFontSize] = useState(config.fontSize);
-  const [tabLayout, setTabLayout] = useState<TabLayout>(
-    normalizeTabLayout(config.tabLayout),
-  );
   const [folder, setFolder] = useState(config.notesFolder ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -116,8 +112,7 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
     if (
       theme === current.theme &&
       fontFamily === current.fontFamily &&
-      fontSize === current.fontSize &&
-      tabLayout === normalizeTabLayout(current.tabLayout)
+      fontSize === current.fontSize
     ) {
       return;
     }
@@ -130,7 +125,6 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
               theme,
               fontFamily,
               fontSize,
-              tabLayout,
             }),
           );
           setSavedFlash(true);
@@ -141,7 +135,7 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
       })();
     }, 180);
     return () => window.clearTimeout(t);
-  }, [theme, fontFamily, fontSize, tabLayout, onConfigChange]);
+  }, [theme, fontFamily, fontSize, onConfigChange]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,7 +165,6 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
         theme,
         fontFamily,
         fontSize,
-        tabLayout,
       });
       setFolder(merged.notesFolder ?? picked);
       await onConfigChange(merged);
@@ -314,66 +307,6 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
                   >
                     The quick brown fox writes a note.
                   </p>
-                </div>
-              </section>
-            ) : null}
-
-            {section === "layout" ? (
-              <section className="settings-panel">
-                <header className="settings-panel-title">
-                  <h3>Layout</h3>
-                  <p>
-                    Title-bar tabs stay available. Choose whether the library
-                    sits beside the editor.
-                  </p>
-                </header>
-
-                <div className="settings-layout-grid">
-                  <button
-                    type="button"
-                    onClick={() => setTabLayout("top")}
-                    className={`settings-layout-card ${
-                      tabLayout === "top" ? "is-active" : ""
-                    }`}
-                  >
-                    <div className="settings-layout-preview">
-                      <div className="flex h-8 items-start">
-                        <div className="flex h-3 w-full items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-sidebar)] px-1.5">
-                          <div className="h-1.5 w-9 rounded-sm bg-[var(--text)]/25" />
-                          <div className="h-1.5 w-6 rounded-sm bg-[var(--border-strong)]" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-[12.5px] font-semibold">Tabs only</div>
-                    <div className="mt-0.5 text-[11px] text-[var(--text-faint)]">
-                      Library via Ctrl+Shift+F
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTabLayout("sidebar")}
-                    className={`settings-layout-card ${
-                      tabLayout === "sidebar" ? "is-active" : ""
-                    }`}
-                  >
-                    <div className="settings-layout-preview">
-                      <div className="flex h-3 items-center gap-1 border-b border-[var(--border)] bg-[var(--bg-sidebar)] px-1.5">
-                        <div className="h-1.5 w-7 rounded-sm bg-[var(--text)]/25" />
-                        <div className="h-1.5 w-5 rounded-sm bg-[var(--border-strong)]" />
-                      </div>
-                      <div className="flex h-5">
-                        <div className="w-7 border-r border-[var(--border)] bg-[var(--bg-sidebar)]" />
-                        <div className="flex-1" />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 text-[12.5px] font-semibold">
-                      <IconPanelLeft size={12} />
-                      Sidebar + tabs
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-[var(--text-faint)]">
-                      Library and top tabs
-                    </div>
-                  </button>
                 </div>
               </section>
             ) : null}

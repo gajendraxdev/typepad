@@ -1,7 +1,14 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
 import type { OpenTab } from "../types";
-import { IconLibrary, IconPanelLeft, IconPlus, IconSettings } from "./icons";
+import {
+  IconLibrary,
+  IconPanelLeft,
+  IconPin,
+  IconPinOff,
+  IconPlus,
+  IconSettings,
+} from "./icons";
 
 interface Props {
   tabs: OpenTab[];
@@ -17,6 +24,9 @@ interface Props {
   /** Show / expand the permanent library sidebar. */
   onToggleSidebar?: () => void;
   sidebarVisible?: boolean;
+  /** Whether the active note is pinned (title-bar pin control). */
+  activePinned?: boolean;
+  onTogglePinActive?: () => void;
 }
 
 /**
@@ -34,6 +44,8 @@ export function TitleBar({
   onOpenLibrary,
   onToggleSidebar,
   sidebarVisible = false,
+  activePinned = false,
+  onTogglePinActive,
 }: Props) {
   const [maximized, setMaximized] = useState(false);
 
@@ -156,6 +168,22 @@ export function TitleBar({
             }
           >
             <IconPanelLeft size={15} />
+          </button>
+        ) : null}
+        {onTogglePinActive ? (
+          <button
+            type="button"
+            className={`titlebar-action ${activePinned ? "is-pinned" : ""}`}
+            onClick={onTogglePinActive}
+            aria-label={activePinned ? "Unpin note" : "Pin note"}
+            aria-pressed={activePinned}
+            title={
+              activePinned
+                ? "Unpin note (Ctrl+Shift+.)"
+                : "Pin note (Ctrl+Shift+.)"
+            }
+          >
+            {activePinned ? <IconPin size={15} /> : <IconPinOff size={15} />}
           </button>
         ) : null}
         {showTabs && onOpenLibrary ? (

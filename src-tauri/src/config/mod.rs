@@ -38,6 +38,12 @@ pub struct AppConfig {
     /// Library sidebar width in CSS pixels (when expanded).
     #[serde(default = "default_sidebar_width")]
     pub sidebar_width: u32,
+    /// Absolute paths of notes pinned to the top of the library list.
+    #[serde(default)]
+    pub pinned_note_paths: Vec<String>,
+    /// When true, the editor shows rendered markdown instead of raw text.
+    #[serde(default)]
+    pub markdown_preview: bool,
 }
 
 impl Default for AppConfig {
@@ -50,6 +56,8 @@ impl Default for AppConfig {
             sidebar_open: true,
             tab_layout: default_tab_layout(),
             sidebar_width: default_sidebar_width(),
+            pinned_note_paths: Vec::new(),
+            markdown_preview: false,
         }
     }
 }
@@ -119,6 +127,26 @@ mod tests {
         save_config(dir.path(), &cfg).unwrap();
         let loaded = load_config(dir.path()).unwrap();
         assert_eq!(loaded, cfg);
+    }
+
+    #[test]
+    fn load_accepts_phase2_fields() {
+        let dir = tempdir().unwrap();
+        let raw = r#"{
+            "notesFolder": null,
+            "theme": "system",
+            "fontFamily": "sans",
+            "fontSize": 16,
+            "sidebarOpen": true,
+            "tabLayout": "sidebar",
+            "sidebarWidth": 240,
+            "pinnedNotePaths": ["/notes/ideas.txt"],
+            "markdownPreview": true
+        }"#;
+        fs::write(config_file_path(dir.path()), raw).unwrap();
+        let cfg = load_config(dir.path()).unwrap();
+        assert_eq!(cfg.pinned_note_paths, vec!["/notes/ideas.txt"]);
+        assert!(cfg.markdown_preview);
     }
 
     #[test]

@@ -1,0 +1,121 @@
+# Multi-platform desktop builds + GitHub Release (draft by default).
+#
+# Trigger options:
+#   1. Push a version tag:  git tag v0.1.0 && git push origin v0.1.0
+#   2. Actions → Release → Run workflow (manual; uses package.json version)
+#
+# Artifacts: Windows (.msi / .exe), Linux (.deb / .AppImage), macOS (.dmg / .app.tar.gz)
+# Signing: optional — set TAURI_SIGNING_* secrets later for updater support.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create release as draft"
+        type: boolean
+        default: true
+      prerelease:
+        description: "Mark as pre-release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Both macOS targets available; each matrix row builds one via args.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and upload (draft release)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Tag push uses the tag name; manual run creates v__VERSION__ from app version.
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: "Typepad ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}"
+          releaseBody: |
+            ## Typepad desktop build
+
+            Native notepad (Tauri v2) — auto-save notes as plain `.txt` files.
+
+            ### Downloads
+            Pick the asset for your OS from the list below this description.
+
+            | Platform | Typical assets |
+            |----------|----------------|
+            | **Windows** | `.msi` installer, `.exe` setup |
+            | **Linux** | `.deb`, `.AppImage` |
+            | **macOS** | `.dmg` (Apple Silicon + Intel builds) |
+
+            ### Notes
+            - First launch asks once for a notes folder (default: Documents/Typepad).
+            - Unsigned builds: Windows SmartScreen / macOS Gatekeeper may warn — expected until code signing is configured.
+            - Full changelog: https://github.com/gajendraxdev/typepad/blob/main/CHANGELOG.md
+
+            ### Verify
+            After install: create a note, wait for auto-save, pin a note, toggle markdown preview (Ctrl+Shift+P).
+          # Always draft on tag push; on manual run honor the draft input.
+          releaseDraft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || github.event_name != 'workflow_dispatch' }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+          args: ${{ matrix.args }}
+          includeUpdaterJson: false

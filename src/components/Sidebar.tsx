@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { relativeTime } from "../lib/format";
 import { SIDEBAR_MAX, SIDEBAR_MIN } from "../lib/config";
+import { splitLibraryNotes } from "../lib/notes";
 import type { NoteMeta } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { IconNote, IconPanelLeft, IconPlus, IconTrash } from "./icons";
+import { IconNote, IconPanelLeft, IconPlus } from "./icons";
+import { NoteContextMenu } from "./NoteContextMenu";
+import { NoteListItem } from "./NoteListItem";
 import { SearchBar } from "./SearchBar";
 
 interface Props {
   notes: NoteMeta[];
   activePath: string | null;
   openPaths: string[];
+  pinnedPaths: string[];
   query: string;
   onQueryChange: (q: string) => void;
   onSelect: (path: string) => void;
   onNew: () => void;
   onDelete: (path: string) => void;
+  onTogglePin: (path: string) => void;
+  /** Reorder within the pinned list (indices into pinnedPaths). */
+  onReorderPins: (fromIndex: number, toIndex: number) => void;
   searchRef: React.RefObject<HTMLInputElement | null>;
   collapsed: boolean;
   onToggle: () => void;
@@ -22,15 +28,25 @@ interface Props {
   onWidthChange: (width: number) => void;
 }
 
+type ContextState = {
+  note: NoteMeta;
+  pinned: boolean;
+  x: number;
+  y: number;
+} | null;
+
 export function Sidebar({
   notes,
   activePath,
   openPaths,
+  pinnedPaths,
   query,
   onQueryChange,
   onSelect,
   onNew,
   onDelete,
+  onTogglePin,
+  onReorderPins,
   searchRef,
   collapsed,
   onToggle,
@@ -38,7 +54,9 @@ export function Sidebar({
   onWidthChange,
 }: Props) {
   const [pendingDelete, setPendingDelete] = useState<NoteMeta | null>(null);
-  const dragging = useRef(false);
+  const [contextMenu, setContextMenu] = useState<ContextState>(null);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const resizing = useRef(false);
   const openSet = useMemo(() => new Set(openPaths), [openPaths]);
 
   const filtered = useMemo(() => {
@@ -52,15 +70,41 @@ export function Sidebar({
     );
   }, [notes, query]);
 
+  const sections = useMemo(
+    () => splitLibraryNotes(filtered, pinnedPaths),
+    [filtered, pinnedPaths],
+  );
+
+  const searching = query.trim().length > 0;
+  const canReorder = !searching && sections.pinned.length > 1;
+  const totalVisible = sections.pinned.length + sections.others.length;
+
+  const openContext = useCallback(
+    (note: NoteMeta, pinned: boolean, x: number, y: number) => {
+      // Keep menu inside the viewport.
+      const menuW = 180;
+      const menuH = 120;
+      const left = Math.min(x, window.innerWidth - menuW - 8);
+      const top = Math.min(y, window.innerHeight - menuH - 8);
+      setContextMenu({
+        note,
+        pinned,
+        x: Math.max(8, left),
+        y: Math.max(8, top),
+      });
+    },
+    [],
+  );
+
   const onResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
-      dragging.current = true;
+      resizing.current = true;
       const startX = e.clientX;
       const startW = width;
 
       const onMove = (ev: PointerEvent) => {
-        if (!dragging.current) return;
+        if (!resizing.current) return;
         const next = Math.min(
           SIDEBAR_MAX,
           Math.max(SIDEBAR_MIN, startW + (ev.clientX - startX)),
@@ -68,7 +112,7 @@ export function Sidebar({
         onWidthChange(next);
       };
       const onUp = () => {
-        dragging.current = false;
+        resizing.current = false;
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         document.body.style.cursor = "";
@@ -82,14 +126,13 @@ export function Sidebar({
     [onWidthChange, width],
   );
 
-  // Double-click resize handle → reset to default width
   const onResizeDoubleClick = useCallback(() => {
     onWidthChange(240);
   }, [onWidthChange]);
 
   useEffect(() => {
     return () => {
-      dragging.current = false;
+      resizing.current = false;
     };
   }, []);
 
@@ -118,6 +161,35 @@ export function Sidebar({
     );
   }
 
+  const renderRow = (
+    note: NoteMeta,
+    pinned: boolean,
+    dragIndex?: number,
+  ) => (
+    <NoteListItem
+      key={note.path}
+      note={note}
+      active={note.path === activePath}
+      isOpen={openSet.has(note.path)}
+      pinned={pinned}
+      draggable={canReorder && pinned && dragIndex !== undefined}
+      dragIndex={dragIndex}
+      onSelect={() => onSelect(note.path)}
+      onTogglePin={() => onTogglePin(note.path)}
+      onDelete={() => setPendingDelete(note)}
+      onContextMenu={(x, y) => openContext(note, pinned, x, y)}
+      onDragStart={(index) => setDragFrom(index)}
+      onDragOver={() => undefined}
+      onDrop={(toIndex) => {
+        if (dragFrom !== null && dragFrom !== toIndex) {
+          onReorderPins(dragFrom, toIndex);
+        }
+        setDragFrom(null);
+      }}
+      onDragEnd={() => setDragFrom(null)}
+    />
+  );
+
   return (
     <>
       <div className="sidebar-shell" style={{ width }}>
@@ -129,6 +201,9 @@ export function Sidebar({
               </div>
               <div className="text-[10px] text-[var(--text-muted)] tabular-nums">
                 {notes.length} note{notes.length === 1 ? "" : "s"}
+                {sections.pinned.length > 0
+                  ? ` · ${sections.pinned.length} pinned`
+                  : ""}
               </div>
             </div>
             <button
@@ -156,7 +231,7 @@ export function Sidebar({
           <SearchBar ref={searchRef} value={query} onChange={onQueryChange} />
 
           <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
-            {filtered.length === 0 ? (
+            {totalVisible === 0 ? (
               <div className="anim-fade-in flex flex-col items-center gap-1.5 px-2 py-6 text-center">
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--bg-hover)] text-[var(--text-faint)]">
                   <IconNote size={14} />
@@ -168,57 +243,39 @@ export function Sidebar({
                 </p>
               </div>
             ) : (
-              <ul className="space-y-px">
-                {filtered.map((note) => {
-                  const active = note.path === activePath;
-                  const isOpen = openSet.has(note.path);
-                  return (
-                    <li key={note.path}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onSelect(note.path)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onSelect(note.path);
-                          }
-                        }}
-                        className={`note-item group ${active ? "is-active" : ""}`}
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-1">
-                          {isOpen && !active ? (
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]/50"
-                              title="Open in a tab"
-                            />
-                          ) : null}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[12px] font-semibold tracking-tight text-[var(--text)]">
-                              {note.title}
-                            </p>
-                            <p className="mt-0.5 text-[10px] leading-none text-[var(--text-faint)] tabular-nums">
-                              {relativeTime(note.modifiedMs)}
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          title="Move to trash"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPendingDelete(note);
-                          }}
-                          className="note-item-delete"
-                          aria-label={`Delete ${note.title}`}
-                        >
-                          <IconTrash size={16} />
-                        </button>
+              <div className="flex flex-col gap-2">
+                {sections.pinned.length > 0 ? (
+                  <section aria-label="Pinned notes">
+                    <div className="library-section-label">
+                      <span>Pinned</span>
+                      <span className="tabular-nums opacity-70">
+                        {sections.pinned.length}
+                      </span>
+                    </div>
+                    <ul className="space-y-px">
+                      {sections.pinned.map((note, index) =>
+                        renderRow(note, true, index),
+                      )}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {sections.others.length > 0 ? (
+                  <section aria-label="All notes">
+                    {sections.pinned.length > 0 ? (
+                      <div className="library-section-label">
+                        <span>{searching ? "Matches" : "Notes"}</span>
+                        <span className="tabular-nums opacity-70">
+                          {sections.others.length}
+                        </span>
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                    ) : null}
+                    <ul className="space-y-px">
+                      {sections.others.map((note) => renderRow(note, false))}
+                    </ul>
+                  </section>
+                ) : null}
+              </div>
             )}
           </div>
         </aside>
@@ -233,6 +290,21 @@ export function Sidebar({
           onDoubleClick={onResizeDoubleClick}
         />
       </div>
+
+      <NoteContextMenu
+        open={!!contextMenu}
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+        pinned={contextMenu?.pinned ?? false}
+        title={contextMenu?.note.title ?? ""}
+        onPin={() => {
+          if (contextMenu) onTogglePin(contextMenu.note.path);
+        }}
+        onDelete={() => {
+          if (contextMenu) setPendingDelete(contextMenu.note);
+        }}
+        onClose={() => setContextMenu(null)}
+      />
 
       <ConfirmDialog
         open={!!pendingDelete}

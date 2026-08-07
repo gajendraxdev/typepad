@@ -7,11 +7,14 @@ import {
   useState,
   forwardRef,
 } from "react";
+import { renderMarkdown } from "../lib/markdown";
 import { IconClose } from "./icons";
 
 export interface EditorHandle {
   openFind: () => void;
   closeFind: () => void;
+  findNext: () => void;
+  findPrev: () => void;
 }
 
 interface Props {
@@ -21,6 +24,7 @@ interface Props {
   fontSize: number;
   disabled?: boolean;
   noteKey?: string;
+  previewMode?: boolean;
 }
 
 function collectMatches(text: string, query: string): number[] {
@@ -43,7 +47,7 @@ function collectMatches(text: string, query: string): number[] {
  * Full-bleed note surface with in-note find (Ctrl+F).
  */
 export const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { value, onChange, fontFamily, fontSize, disabled, noteKey },
+  { value, onChange, fontFamily, fontSize, disabled, noteKey, previewMode = false },
   ref,
 ) {
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -79,6 +83,8 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
   );
 
   const openFind = useCallback(() => {
+    // Find bar only applies to the raw editor, not markdown preview.
+    if (previewMode) return;
     setFindOpen(true);
     const el = taRef.current;
     // Seed query from current selection when non-empty.
@@ -92,17 +98,22 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
       findInputRef.current?.focus();
       findInputRef.current?.select();
     });
-  }, []);
+  }, [previewMode]);
 
   const closeFind = useCallback(() => {
     setFindOpen(false);
     requestAnimationFrame(() => taRef.current?.focus());
   }, []);
 
-  useImperativeHandle(ref, () => ({ openFind, closeFind }), [
-    openFind,
-    closeFind,
-  ]);
+  const previewHtml = useMemo(
+    () => (previewMode ? renderMarkdown(value) : ""),
+    [previewMode, value],
+  );
+
+  // Close find when entering preview mode.
+  useEffect(() => {
+    if (previewMode) setFindOpen(false);
+  }, [previewMode]);
 
   // Focus editor when switching notes; reset find state.
   useEffect(() => {
@@ -144,6 +155,12 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
     selectMatch(matchIndex - 1);
   }, [matchIndex, matches.length, selectMatch]);
 
+  useImperativeHandle(
+    ref,
+    () => ({ openFind, closeFind, findNext: goNext, findPrev: goPrev }),
+    [openFind, closeFind, goNext, goPrev],
+  );
+
   const onFindKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -160,7 +177,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   return (
     <div className="editor-shell">
-      {findOpen ? (
+      {findOpen && !previewMode ? (
         <div className="editor-find" role="search">
           <input
             ref={findInputRef}
@@ -215,23 +232,35 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor(
         </div>
       ) : null}
 
-      <textarea
-        ref={taRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        spellCheck
-        placeholder="Start writing…"
-        className="editor-textarea"
-        style={{
-          fontFamily,
-          fontSize: `${fontSize}px`,
-          lineHeight: 1.7,
-          letterSpacing: "-0.005em",
-          // Leave room for the find bar when open
-          paddingTop: findOpen ? "3.25rem" : undefined,
-        }}
-      />
+      {previewMode ? (
+        <div
+          className="markdown-preview editor-textarea"
+          style={{
+            fontFamily,
+            fontSize: `${fontSize}px`,
+            lineHeight: 1.7,
+            letterSpacing: "-0.005em",
+          }}
+          dangerouslySetInnerHTML={{ __html: previewHtml }}
+        />
+      ) : (
+        <textarea
+          ref={taRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          spellCheck
+          placeholder="Start writing…"
+          className="editor-textarea"
+          style={{
+            fontFamily,
+            fontSize: `${fontSize}px`,
+            lineHeight: 1.7,
+            letterSpacing: "-0.005em",
+            paddingTop: findOpen ? "3.25rem" : undefined,
+          }}
+        />
+      )}
     </div>
   );
 });

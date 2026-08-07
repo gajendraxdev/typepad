@@ -31,7 +31,12 @@ function neighborPath(
   return (next[idx] ?? next[idx - 1] ?? null)?.path ?? null;
 }
 
-export function useNotes(ready: boolean) {
+export interface UseNotesOptions {
+  /** Called when auto-save renames a note file after a title change. */
+  onPathRenamed?: (oldPath: string, newPath: string) => void;
+}
+
+export function useNotes(ready: boolean, options: UseNotesOptions = {}) {
   const [notes, setNotes] = useState<NoteMeta[]>([]);
   const [tabs, setTabs] = useState<OpenTab[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
@@ -48,6 +53,8 @@ export function useNotes(ready: boolean) {
   const inFlight = useRef<Map<string, Promise<void>>>(new Map());
   /** Paths that need another pass after the current in-flight save. */
   const pendingResave = useRef<Set<string>>(new Set());
+  const onPathRenamedRef = useRef(options.onPathRenamed);
+  onPathRenamedRef.current = options.onPathRenamed;
 
   tabsRef.current = tabs;
   activePathRef.current = activePath;
@@ -162,6 +169,9 @@ export function useNotes(ready: boolean) {
               activePathRef.current = result.path;
               setActivePath(result.path);
             }
+          }
+          if (result.path !== pathAtStart) {
+            onPathRenamedRef.current?.(pathAtStart, result.path);
           }
           await refreshList();
         } catch (e) {
@@ -311,9 +321,9 @@ export function useNotes(ready: boolean) {
 
   const deleteNote = useCallback(
     async (path: string) => {
+      await ensureSaved(path);
       clearTimer(path);
       try {
-        // Flush is skipped on purpose — we're deleting; still try soft-delete.
         await api.trashNote(path);
         const current = tabsRef.current;
         const nextActive =
@@ -329,7 +339,7 @@ export function useNotes(ready: boolean) {
         setError(String(e));
       }
     },
-    [clearTimer, refreshList],
+    [clearTimer, ensureSaved, refreshList],
   );
 
   const updateDraft = useCallback(

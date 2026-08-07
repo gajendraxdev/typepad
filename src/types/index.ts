@@ -1,6 +1,4 @@
 export type ThemeMode = "system" | "light" | "dark";
-/** "top" = title-bar tabs only. "sidebar" = library sidebar + title-bar tabs. */
-export type TabLayout = "top" | "sidebar";
 
 export interface AppConfig {
   notesFolder: string | null;
@@ -8,10 +6,12 @@ export interface AppConfig {
   fontFamily: string;
   fontSize: number;
   sidebarOpen: boolean;
-  /** "top" = tabs only. "sidebar" = permanent library + top tabs. */
-  tabLayout: TabLayout;
   /** Expanded library width in px. */
   sidebarWidth: number;
+  /** Absolute paths pinned to the top of the library. */
+  pinnedNotePaths: string[];
+  /** Show rendered markdown instead of raw text in the editor. */
+  markdownPreview: boolean;
 }
 
 export interface BootstrapInfo {

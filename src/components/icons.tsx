@@ -156,6 +156,49 @@ export function IconLibrary({ className, size = 16 }: IconProps) {
   );
 }
 
+/** Stroke pushpin — filled via CSS when pinned (accent color on stroke). */
+export function IconPin({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 17v4" />
+      <path d="M9 3h6" />
+      <path d="M12 3v5" />
+      <path d="M8.5 8.5 5 13l1.5 1.5 3-1.2.5.4v1.8l2-.9 2 .9v-1.8l.5-.4 3 1.2L19 13l-3.5-4.5" />
+      <path d="M9 8.5h6" />
+    </svg>
+  );
+}
+
+/** Outline pin used for “not pinned” hover affordance. */
+export function IconPinOff({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 17v4" />
+      <path d="M9 3h6" />
+      <path d="M12 3v5" />
+      <path d="M8.5 8.5 5 13l1.5 1.5 3-1.2.5.4v1.8l2-.9 2 .9v-1.8l.5-.4 3 1.2L19 13l-3.5-4.5" />
+      <path d="M9 8.5h6" opacity="0.45" />
+    </svg>
+  );
+}
+
+export function IconEye({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  );
+}
+
+export function IconPencil({ className, size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)} className={className}>
+      <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
 export function IconSparkle({ className, size = 16 }: IconProps) {
   return (
     <svg {...base(size)} className={className}>

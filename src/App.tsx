@@ -16,6 +16,14 @@ import {
   normalizeSidebarWidth,
   SIDEBAR_DEFAULT,
 } from "./lib/config";
+import {
+  isPinned,
+  movePinnedPath,
+  prunePinnedPaths,
+  remapPinnedPath,
+  removePinnedPath,
+  togglePinnedPath,
+} from "./lib/notes";
 import type { AppConfig } from "./types";
 
 export default function App() {
@@ -33,9 +41,53 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<EditorHandle>(null);
   const widthSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Latest config for concurrent-safe patches (not reset from render). */
+  const configRef = useRef<AppConfig | null>(null);
+  /** Serializes config IPC writes so concurrent patches cannot clobber each other. */
+  const configWriteChain = useRef(Promise.resolve());
 
   const ready = bootstrapped && !needsSetup && !!config?.notesFolder;
-  const notesApi = useNotes(ready);
+
+  /**
+   * Apply config locally, then enqueue a disk write of the *latest* snapshot when
+   * this turn of the queue runs (not a stale closed-over object).
+   */
+  const persistConfig = useCallback((next: AppConfig) => {
+    const local = normalizeConfig(next);
+    configRef.current = local;
+    setConfig(local);
+    setSidebarWidth(local.sidebarWidth);
+
+    const run = configWriteChain.current
+      .catch(() => undefined)
+      .then(async () => {
+        const snapshot = configRef.current;
+        if (!snapshot) return;
+        const saved = await api.updateConfig(normalizeConfig(snapshot));
+        const fromServer = normalizeConfig(saved);
+        // Skip applying a response if a newer local patch landed mid-flight.
+        if (configRef.current !== snapshot) return;
+        configRef.current = fromServer;
+        setConfig(fromServer);
+        setSidebarWidth(fromServer.sidebarWidth);
+      });
+    configWriteChain.current = run;
+    return run;
+  }, []);
+
+  const handlePathRenamed = useCallback(
+    (oldPath: string, newPath: string) => {
+      const prev = configRef.current;
+      if (!prev) return;
+      void persistConfig({
+        ...prev,
+        pinnedNotePaths: remapPinnedPath(prev.pinnedNotePaths, oldPath, newPath),
+      });
+    },
+    [persistConfig],
+  );
+
+  const notesApi = useNotes(ready, { onPathRenamed: handlePathRenamed });
 
   useTheme(config?.theme ?? "system");
   useWindowCloseFlush(notesApi.flushAllDirty);
@@ -49,8 +101,8 @@ export default function App() {
         const info = await api.getBootstrap();
         if (cancelled) return;
         let cfg = normalizeConfig(info.config);
-        if (cfg.tabLayout !== "sidebar" || !cfg.sidebarOpen) {
-          cfg = { ...cfg, tabLayout: "sidebar", sidebarOpen: true };
+        if (!cfg.sidebarOpen) {
+          cfg = { ...cfg, sidebarOpen: true };
           try {
             cfg = normalizeConfig(await api.updateConfig(cfg));
           } catch {
@@ -58,6 +110,7 @@ export default function App() {
           }
         }
         if (cancelled) return;
+        configRef.current = cfg;
         setConfig(cfg);
         setSidebarWidth(cfg.sidebarWidth);
         setDefaultFolder(info.defaultNotesFolder);
@@ -75,44 +128,111 @@ export default function App() {
     };
   }, []);
 
-  const persistConfig = useCallback(async (next: AppConfig) => {
-    const saved = await api.updateConfig(normalizeConfig(next));
-    const normalized = normalizeConfig(saved);
-    setConfig(normalized);
-    setSidebarWidth(normalized.sidebarWidth);
-  }, []);
-
   const handleFirstRun = useCallback(async (path: string) => {
     const saved = await api.setNotesFolder({ path, moveExisting: false });
     const normalized = normalizeConfig({
       ...saved,
-      tabLayout: "sidebar",
       sidebarOpen: true,
     });
+    configRef.current = normalized;
     setConfig(normalized);
     setSidebarWidth(normalized.sidebarWidth);
     setNeedsSetup(false);
   }, []);
 
   const toggleSidebar = useCallback(() => {
-    if (!config) return;
-    void persistConfig({ ...config, sidebarOpen: !config.sidebarOpen });
-  }, [config, persistConfig]);
+    const prev = configRef.current;
+    if (!prev) return;
+    void persistConfig({ ...prev, sidebarOpen: !prev.sidebarOpen });
+  }, [persistConfig]);
 
   const handleSidebarWidth = useCallback(
     (width: number) => {
       const w = normalizeSidebarWidth(width);
       setSidebarWidth(w);
-      if (!config) return;
       if (widthSaveTimer.current) clearTimeout(widthSaveTimer.current);
       widthSaveTimer.current = setTimeout(() => {
-        void persistConfig({ ...config, sidebarWidth: w });
+        const prev = configRef.current;
+        if (!prev) return;
+        void persistConfig({ ...prev, sidebarWidth: w });
       }, 250);
     },
-    [config, persistConfig],
+    [persistConfig],
   );
 
   const { newNote, closeNote, selectTab, closeTab, flushAllDirty } = notesApi;
+
+  useEffect(() => {
+    if (!config || !ready) return;
+    const pruned = prunePinnedPaths(config.pinnedNotePaths, notesApi.notes);
+    if (pruned.length !== config.pinnedNotePaths.length) {
+      void persistConfig({ ...config, pinnedNotePaths: pruned });
+    }
+  }, [config, notesApi.notes, ready, persistConfig]);
+
+  /** Optimistic pin list update, then persist via the write queue. */
+  const applyPinnedPaths = useCallback(
+    (nextPins: string[]) => {
+      const prev = configRef.current;
+      if (!prev) return;
+      void persistConfig({ ...prev, pinnedNotePaths: nextPins });
+    },
+    [persistConfig],
+  );
+
+  const togglePin = useCallback(
+    (path: string) => {
+      const prev = configRef.current;
+      if (!prev) return;
+      applyPinnedPaths(togglePinnedPath(prev.pinnedNotePaths, path));
+    },
+    [applyPinnedPaths],
+  );
+
+  const reorderPins = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const prev = configRef.current;
+      if (!prev) return;
+      const next = movePinnedPath(prev.pinnedNotePaths, fromIndex, toIndex);
+      if (next === prev.pinnedNotePaths) return;
+      applyPinnedPaths(next);
+    },
+    [applyPinnedPaths],
+  );
+
+  const toggleActivePin = useCallback(() => {
+    const path = notesApi.activePath;
+    if (!path) return;
+    togglePin(path);
+  }, [notesApi.activePath, togglePin]);
+
+  const handleDeleteNote = useCallback(
+    async (path: string) => {
+      await notesApi.deleteNote(path);
+      const prev = configRef.current;
+      if (!prev) return;
+      const nextPins = removePinnedPath(prev.pinnedNotePaths, path);
+      if (nextPins.length !== prev.pinnedNotePaths.length) {
+        applyPinnedPaths(nextPins);
+      }
+    },
+    [notesApi, applyPinnedPaths],
+  );
+
+  const activeIsPinned = Boolean(
+    notesApi.activePath &&
+      config &&
+      isPinned(config.pinnedNotePaths, notesApi.activePath),
+  );
+
+  const toggleMarkdownPreview = useCallback(() => {
+    const prev = configRef.current;
+    if (!prev) return;
+    void persistConfig({
+      ...prev,
+      markdownPreview: !prev.markdownPreview,
+    });
+  }, [persistConfig]);
 
   // After Ctrl+F expands the sidebar, wait until the search input exists, then focus it.
   useEffect(() => {
@@ -142,30 +262,37 @@ export default function App() {
           editorRef.current?.openFind();
         } else {
           // No note open → fall back to library search
-          if (config && !config.sidebarOpen) {
-            void persistConfig({ ...config, sidebarOpen: true });
+          const prev = configRef.current;
+          if (prev && !prev.sidebarOpen) {
+            void persistConfig({ ...prev, sidebarOpen: true });
           }
           setSearchFocusReq((n) => n + 1);
         }
       },
       // Ctrl+Shift+F → search notes in the library
       onLibrarySearch: () => {
-        if (config && !config.sidebarOpen) {
-          void persistConfig({ ...config, sidebarOpen: true });
+        const prev = configRef.current;
+        if (prev && !prev.sidebarOpen) {
+          void persistConfig({ ...prev, sidebarOpen: true });
         }
         setSearchFocusReq((n) => n + 1);
       },
       onSettings: () => setSettingsOpen(true),
       onCloseNote: () => void closeNote(),
       onToggleSidebar: toggleSidebar,
+      onFindNext: () => editorRef.current?.findNext(),
+      onFindPrev: () => editorRef.current?.findPrev(),
+      onToggleMarkdownPreview: toggleMarkdownPreview,
+      onTogglePinActive: toggleActivePin,
     }),
     [
       newNote,
       closeNote,
-      config,
       persistConfig,
       toggleSidebar,
       notesApi.active,
+      toggleMarkdownPreview,
+      toggleActivePin,
     ],
   );
 
@@ -182,6 +309,8 @@ export default function App() {
       onOpenSettings={() => setSettingsOpen(true)}
       onToggleSidebar={toggleSidebar}
       sidebarVisible={sidebarOpen}
+      activePinned={activeIsPinned}
+      onTogglePinActive={notesApi.activePath ? toggleActivePin : undefined}
     />
   );
 
@@ -236,10 +365,10 @@ export default function App() {
             const folderChanged = next.notesFolder !== config.notesFolder;
             if (folderChanged) {
               await flushAllDirty().catch(() => undefined);
-              setConfig(normalizeConfig(next));
-              await api
-                .updateConfig(normalizeConfig(next))
-                .catch(() => undefined);
+              const normalized = normalizeConfig(next);
+              configRef.current = normalized;
+              setConfig(normalized);
+              await api.updateConfig(normalized).catch(() => undefined);
               await notesApi.resetAfterFolderChange();
             } else {
               await persistConfig(next);
@@ -255,11 +384,14 @@ export default function App() {
           notes={notesApi.notes}
           activePath={notesApi.activePath}
           openPaths={notesApi.tabs.map((t) => t.path)}
+          pinnedPaths={config?.pinnedNotePaths ?? []}
           query={query}
           onQueryChange={setQuery}
           onSelect={(path) => void notesApi.openNote(path)}
           onNew={() => void notesApi.newNote()}
-          onDelete={(path) => void notesApi.deleteNote(path)}
+          onDelete={(path) => void handleDeleteNote(path)}
+          onTogglePin={togglePin}
+          onReorderPins={reorderPins}
           searchRef={searchRef}
           collapsed={!sidebarOpen}
           onToggle={toggleSidebar}
@@ -288,6 +420,7 @@ export default function App() {
                   fontSize={config?.fontSize ?? 16}
                   disabled={notesApi.loading}
                   noteKey={notesApi.active.path}
+                  previewMode={config?.markdownPreview ?? false}
                 />
               ) : (
                 <EmptyState onNew={() => void notesApi.newNote()} />
@@ -299,6 +432,8 @@ export default function App() {
               saveStatus={notesApi.active ? notesApi.saveStatus : "idle"}
               filename={notesApi.active?.filename}
               title={notesApi.active?.title}
+              markdownPreview={config?.markdownPreview ?? false}
+              onToggleMarkdownPreview={toggleMarkdownPreview}
             />
           </main>
         </div>

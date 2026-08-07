@@ -1,17 +1,10 @@
-import type { AppConfig, TabLayout, ThemeMode } from "../types";
+import type { AppConfig, ThemeMode } from "../types";
 
 const THEMES: ThemeMode[] = ["system", "light", "dark"];
 
 export const SIDEBAR_MIN = 180;
 export const SIDEBAR_MAX = 420;
 export const SIDEBAR_DEFAULT = 240;
-
-/** Normalize any value from disk/IPC into a known layout. Legacy "vertical" → sidebar. */
-export function normalizeTabLayout(value: string | undefined | null): TabLayout {
-  if (value === "top") return "top";
-  // Default + legacy "vertical" / missing / unknown → sidebar (library + tabs)
-  return "sidebar";
-}
 
 export function normalizeTheme(value: string | undefined | null): ThemeMode {
   if (value && (THEMES as string[]).includes(value)) {
@@ -26,6 +19,11 @@ export function normalizeSidebarWidth(value: unknown): number {
   return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(n)));
 }
 
+function normalizePinnedPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((p): p is string => typeof p === "string" && p.length > 0);
+}
+
 /** Single hydration path for AppConfig from the backend. */
 export function normalizeConfig(raw: AppConfig): AppConfig {
   return {
@@ -37,7 +35,8 @@ export function normalizeConfig(raw: AppConfig): AppConfig {
         ? raw.fontSize
         : 16,
     sidebarOpen: raw.sidebarOpen ?? true,
-    tabLayout: normalizeTabLayout(raw.tabLayout as string | undefined),
     sidebarWidth: normalizeSidebarWidth(raw.sidebarWidth),
+    pinnedNotePaths: normalizePinnedPaths(raw.pinnedNotePaths),
+    markdownPreview: raw.markdownPreview ?? false,
   };
 }

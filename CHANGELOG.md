@@ -31,12 +31,12 @@ First public draft release of Typepad.
 - Config writes serialized to avoid pin/width races
 - Markdown preview sanitized with DOMPurify
 - Path resolution constrained under the configured notes folder
+- **Auto-updater** with minisign-verified GitHub Releases (`latest.json`)
 
 ### Known limitations
-- Not code-signed (SmartScreen / Gatekeeper may warn)
+- Not OS code-signed (SmartScreen / Gatekeeper may warn)
 - No system-tray quick note or PDF export yet (planned)
 - No external file watcher (edits from other apps need re-open/refresh)
-- No auto-updater yet
 
 ### Install (from GitHub Release assets)
 - **Windows:** run the `.msi` (or `.exe`) installer
@@ -51,6 +51,6 @@ First public draft release of Typepad.
 - System tray + global quick-note hotkey
 - Export note as PDF
 - Folder watcher for external edits
-- Optional code signing and auto-update
+- Optional OS code signing (Authenticode / notarization)
 
 [0.1.0]: https://github.com/gajendraxdev/typepad/releases/tag/v0.1.0

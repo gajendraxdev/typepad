@@ -9,9 +9,16 @@ import {
   IconKeyboard,
   IconMonitor,
   IconMoon,
+  IconSparkle,
   IconSun,
   IconType,
 } from "./icons";
+import {
+  checkForUpdate,
+  downloadAndInstallUpdate,
+  type UpdateInfo,
+} from "../lib/updater";
+import { getVersion } from "@tauri-apps/api/app";
 
 interface Props {
   config: AppConfig;
@@ -19,7 +26,7 @@ interface Props {
   onConfigChange: (config: AppConfig) => Promise<void>;
 }
 
-type SectionId = "appearance" | "storage" | "shortcuts";
+type SectionId = "appearance" | "storage" | "shortcuts" | "about";
 
 const SECTIONS: {
   id: SectionId;
@@ -44,6 +51,12 @@ const SECTIONS: {
     label: "Shortcuts",
     description: "Keyboard reference",
     icon: IconKeyboard,
+  },
+  {
+    id: "about",
+    label: "About",
+    description: "Version and updates",
+    icon: IconSparkle,
   },
 ];
 
@@ -104,8 +117,18 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("…");
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
+
+  useEffect(() => {
+    void getVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion("0.1.0"));
+  }, []);
 
   useEffect(() => {
     const current = configRef.current;
@@ -149,6 +172,47 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
   useEffect(() => {
     if (section !== "storage") setMessage(null);
   }, [section]);
+
+  useEffect(() => {
+    if (section !== "about") {
+      setUpdateMsg(null);
+    }
+  }, [section]);
+
+  const runUpdateCheck = async () => {
+    setUpdateBusy(true);
+    setUpdateMsg(null);
+    setPendingUpdate(null);
+    try {
+      const next = await checkForUpdate();
+      if (!next) {
+        setUpdateMsg("You’re on the latest version.");
+        return;
+      }
+      setPendingUpdate(next);
+      setUpdateMsg(`Version ${next.version} is available.`);
+    } catch (e) {
+      setUpdateMsg(String(e));
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const installPendingUpdate = async () => {
+    setUpdateBusy(true);
+    setUpdateMsg("Downloading update…");
+    try {
+      await downloadAndInstallUpdate(({ downloaded, total }) => {
+        if (total && total > 0) {
+          const pct = Math.min(100, Math.round((downloaded / total) * 100));
+          setUpdateMsg(`Downloading update… ${pct}%`);
+        }
+      });
+    } catch (e) {
+      setUpdateMsg(String(e));
+      setUpdateBusy(false);
+    }
+  };
 
   const changeFolder = async (moveExisting: boolean) => {
     const picked = await api.pickFolder(folder || undefined);
@@ -387,6 +451,51 @@ export function SettingsModal({ config, onClose, onConfigChange }: Props) {
                     </li>
                   ))}
                 </ul>
+              </section>
+            ) : null}
+
+            {section === "about" ? (
+              <section className="settings-panel">
+                <header className="settings-panel-title">
+                  <h3>About Typepad</h3>
+                  <p>Version info and signed auto-updates.</p>
+                </header>
+
+                <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2">
+                  <p className="text-[12px] font-medium text-[var(--text)]">
+                    Typepad {appVersion}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-[var(--text-faint)]">
+                    Updates are verified with a public key before install.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    disabled={updateBusy}
+                    onClick={() => void runUpdateCheck()}
+                    className="ui-btn ui-btn-outline !rounded-md disabled:opacity-60"
+                  >
+                    {updateBusy ? "Checking…" : "Check for updates"}
+                  </button>
+                  {pendingUpdate ? (
+                    <button
+                      type="button"
+                      disabled={updateBusy}
+                      onClick={() => void installPendingUpdate()}
+                      className="ui-btn ui-btn-soft !rounded-md disabled:opacity-60"
+                    >
+                      Install {pendingUpdate.version} & restart
+                    </button>
+                  ) : null}
+                </div>
+
+                {updateMsg ? (
+                  <p className="anim-fade-in text-[12px] text-[var(--text-muted)]">
+                    {updateMsg}
+                  </p>
+                ) : null}
               </section>
             ) : null}
           </div>

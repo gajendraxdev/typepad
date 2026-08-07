@@ -24,6 +24,9 @@ lerna-debug.log*
 credentials.json
 secrets/
 
+# Tauri updater signing keys (private key must never be committed)
+.tauri/
+
 # Rust / Tauri
 src-tauri/target/
 src-tauri/gen/

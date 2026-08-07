@@ -6,6 +6,7 @@ import { SettingsModal } from "./components/SettingsModal";
 import { Sidebar } from "./components/Sidebar";
 import { StatusBar } from "./components/StatusBar";
 import { TitleBar } from "./components/TitleBar";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useNotes } from "./hooks/useNotes";
 import { useTheme } from "./hooks/useTheme";
@@ -378,6 +379,7 @@ export default function App() {
       ) : null}
 
       {titleBar}
+      {ready ? <UpdateBanner /> : null}
 
       <div className="app-body">
         <Sidebar

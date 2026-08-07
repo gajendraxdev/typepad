@@ -5,7 +5,9 @@
 #   2. Actions → Release → Run workflow (manual; uses package.json version)
 #
 # Artifacts: Windows (.msi / .exe), Linux (.deb / .AppImage), macOS (.dmg / .app.tar.gz)
-# Signing: optional — set TAURI_SIGNING_* secrets later for updater support.
+# Updater signing (required for auto-update): set repo secrets
+#   TAURI_SIGNING_PRIVATE_KEY
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  (empty string if key has no password)
 name: Release
 
 on:
@@ -85,10 +87,22 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Require updater signing secret
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Missing secret TAURI_SIGNING_PRIVATE_KEY. Auto-update artifacts cannot be signed."
+            exit 1
+          fi
+        shell: bash
+
       - name: Build and upload (draft release)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           # Tag push uses the tag name; manual run creates v__VERSION__ from app version.
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
@@ -107,9 +121,13 @@ jobs:
             | **Linux** | `.deb`, `.AppImage` |
             | **macOS** | `.dmg` (Apple Silicon + Intel builds) |
 
+            ### Auto-update
+            Installers are signed for the in-app updater. The app checks
+            `latest.json` on this release for newer versions.
+
             ### Notes
             - First launch asks once for a notes folder (default: Documents/Typepad).
-            - Unsigned builds: Windows SmartScreen / macOS Gatekeeper may warn — expected until code signing is configured.
+            - OS code signing (SmartScreen / Gatekeeper) is separate and optional.
             - Full changelog: https://github.com/gajendraxdev/typepad/blob/main/CHANGELOG.md
 
             ### Verify
@@ -118,4 +136,4 @@ jobs:
           releaseDraft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || github.event_name != 'workflow_dispatch' }}
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           args: ${{ matrix.args }}
-          includeUpdaterJson: false
+          includeUpdaterJson: true

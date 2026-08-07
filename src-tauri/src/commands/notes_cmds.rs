@@ -95,10 +95,7 @@ pub struct RenameNoteArgs {
 }
 
 #[tauri::command]
-pub fn rename_note_cmd(
-    state: State<'_, AppState>,
-    args: RenameNoteArgs,
-) -> AppResult<SaveResult> {
+pub fn rename_note_cmd(state: State<'_, AppState>, args: RenameNoteArgs) -> AppResult<SaveResult> {
     let folder = notes_folder(&state)?;
     let safe = assert_note_path(&folder, Path::new(&args.path))?;
     rename_note(&folder, &safe, &args.name)

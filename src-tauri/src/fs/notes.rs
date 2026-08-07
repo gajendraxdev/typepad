@@ -393,7 +393,13 @@ mod tests {
         assert!(Path::new(&r1.path).exists());
 
         // Same title → no rename
-        let r2 = save_note(dir.path(), Path::new(&r1.path), "Hello world\nbody more", true).unwrap();
+        let r2 = save_note(
+            dir.path(),
+            Path::new(&r1.path),
+            "Hello world\nbody more",
+            true,
+        )
+        .unwrap();
         assert!(!r2.renamed);
         assert_eq!(r2.filename, "Hello world.txt");
 
